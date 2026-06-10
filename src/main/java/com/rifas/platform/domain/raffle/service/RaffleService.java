@@ -2,11 +2,17 @@ package com.rifas.platform.domain.raffle.service;
 
 import com.rifas.platform.domain.organizer.entity.OrganizerProfile;
 import com.rifas.platform.domain.organizer.repository.OrganizerProfileRepository;
+import com.rifas.platform.domain.execution.entity.RaffleExecution;
+import com.rifas.platform.domain.execution.repository.RaffleExecutionRepository;
 import com.rifas.platform.domain.payment.entity.PaymentMethod;
 import com.rifas.platform.domain.payment.repository.PaymentMethodRepository;
 import com.rifas.platform.domain.raffle.dto.CreateRaffleRequest;
+import com.rifas.platform.domain.raffle.dto.OrganizerRaffleResponse;
 import com.rifas.platform.domain.raffle.dto.RafflePublicResponse;
 import com.rifas.platform.domain.raffle.entity.*;
+import com.rifas.platform.domain.reservation.entity.Reservation;
+import com.rifas.platform.domain.reservation.repository.ReservationRepository;
+import com.rifas.platform.domain.raffle.repository.RaffleImageRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleNumberRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleRepository;
 import com.rifas.platform.shared.audit.service.AuditService;
@@ -20,9 +26,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -34,11 +42,15 @@ public class RaffleService {
 
     private final RaffleRepository raffleRepository;
     private final RaffleNumberRepository raffleNumberRepository;
+    private final RaffleImageRepository raffleImageRepository;
+    private final ReservationRepository reservationRepository;
+    private final RaffleExecutionRepository raffleExecutionRepository;
     private final OrganizerProfileRepository organizerProfileRepository;
     private final PaymentMethodRepository paymentMethodRepository;
     private final AuditService auditService;
+    private final ImageStorageService imageStorageService;
 
-    public Raffle create(CreateRaffleRequest req) {
+    public OrganizerRaffleResponse create(CreateRaffleRequest req) {
         OrganizerProfile organizer = currentOrganizer();
 
         String slug = generateUniqueSlug(req.title());
@@ -83,23 +95,45 @@ public class RaffleService {
         raffleNumberRepository.saveAll(numbers);
 
         auditService.log("RAFFLE_CREATED", "Raffle", saved.getId(), null, saved.getTitle());
-        return saved;
+        return toOrganizerResponse(saved);
     }
 
-    public Raffle publish(UUID raffleId) {
+    public OrganizerRaffleResponse publish(UUID raffleId) {
         Raffle raffle = findOwnedRaffle(raffleId);
         if (raffle.getPublicationStatus() != PublicationStatus.DRAFT) {
             throw new BusinessException("Solo se pueden publicar rifas en borrador");
         }
         raffle.setPublicationStatus(PublicationStatus.PUBLISHED);
         auditService.log("RAFFLE_PUBLISHED", "Raffle", raffleId, null, null);
-        return raffleRepository.save(raffle);
+        return toOrganizerResponse(raffleRepository.save(raffle));
     }
 
-    public Raffle pause(UUID raffleId) {
+    public OrganizerRaffleResponse pause(UUID raffleId) {
         Raffle raffle = findOwnedRaffle(raffleId);
         raffle.setPublicationStatus(PublicationStatus.PAUSED);
-        return raffleRepository.save(raffle);
+        return toOrganizerResponse(raffleRepository.save(raffle));
+    }
+
+    public void delete(UUID raffleId) {
+        Raffle raffle = findOwnedRaffle(raffleId);
+
+        raffleImageRepository.findByRaffleIdOrderByDisplayOrder(raffleId).stream()
+                .map(RaffleImage::getPublicId)
+                .filter(publicId -> publicId != null && !publicId.isBlank())
+                .forEach(imageStorageService::delete);
+
+        raffleExecutionRepository.findByRaffle(raffle)
+                .ifPresent(raffleExecutionRepository::delete);
+
+        raffleNumberRepository.deleteByRaffle(raffle);
+
+        List<Reservation> reservations = reservationRepository.findByRaffleId(raffleId);
+        if (!reservations.isEmpty()) {
+            reservationRepository.deleteAll(reservations);
+        }
+
+        auditService.log("RAFFLE_DELETED", "Raffle", raffleId, null, raffle.getTitle());
+        raffleRepository.delete(raffle);
     }
 
     @Transactional(readOnly = true)
@@ -156,8 +190,30 @@ public class RaffleService {
     }
 
     @Transactional(readOnly = true)
-    public List<Raffle> getMyRaffles() {
-        return raffleRepository.findByOrganizerIdOrderByCreatedAtDesc(currentOrganizer().getId());
+    public List<OrganizerRaffleResponse> getMyRaffles() {
+        return raffleRepository.findByOrganizerIdOrderByCreatedAtDesc(currentOrganizer().getId()).stream()
+                .map(this::toOrganizerResponse)
+                .toList();
+    }
+
+    public void uploadImages(UUID raffleId, List<MultipartFile> files) throws IOException {
+        Raffle raffle = findOwnedRaffle(raffleId);
+        long existing = raffleImageRepository.countByRaffleId(raffleId);
+        if (existing + files.size() > 5) {
+            throw new BusinessException("La rifa ya tiene el máximo de 5 imágenes");
+        }
+        int order = (int) existing;
+        for (MultipartFile file : files) {
+            ImageStorageService.UploadResult result = imageStorageService.upload(file, raffleId);
+            RaffleImage img = RaffleImage.builder()
+                    .raffle(raffle)
+                    .url(result.url())
+                    .publicId(result.publicId())
+                    .displayOrder(order++)
+                    .coverImage(order == 1)
+                    .build();
+            raffleImageRepository.save(img);
+        }
     }
 
     private Raffle findOwnedRaffle(UUID raffleId) {
@@ -188,6 +244,31 @@ public class RaffleService {
             slug = base + "-" + (++attempt);
         }
         return slug;
+    }
+
+    private OrganizerRaffleResponse toOrganizerResponse(Raffle raffle) {
+        long participantCount = reservationRepository.countDistinctParticipantsByRaffleId(raffle.getId());
+
+        return new OrganizerRaffleResponse(
+                raffle.getId(),
+                raffle.getTitle(),
+                raffle.getSlug(),
+                raffle.getPrize() != null ? raffle.getPrize().getName() : null,
+                participantCount,
+                raffle.getPublicationStatus(),
+                raffle.getOperationalStatus(),
+                raffle.getTotalNumbers(),
+                raffle.getPricePerNumber(),
+                raffle.getDrawDateTime(),
+                raffle.getCreatedAt(),
+                raffle.getImages().stream()
+                        .map(image -> new OrganizerRaffleResponse.ImageInfo(
+                                image.getUrl(),
+                                image.getAltText(),
+                                image.isCoverImage(),
+                                image.getDisplayOrder()))
+                        .toList()
+        );
     }
 
 }

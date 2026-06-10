@@ -43,5 +43,7 @@ public interface RaffleNumberRepository extends JpaRepository<RaffleNumber, UUID
             @Param("status") NumberStatus status
     );
 
+    void deleteByRaffle(Raffle raffle);
+
     boolean existsByRaffleAndNumber(Raffle raffle, Integer number);
 }

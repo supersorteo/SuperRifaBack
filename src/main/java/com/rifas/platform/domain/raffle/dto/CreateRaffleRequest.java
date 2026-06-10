@@ -9,10 +9,10 @@ import java.time.LocalDateTime;
 
 public record CreateRaffleRequest(
         @NotBlank @Size(max = 200) String title,
-        @NotBlank String description,
+        String description,
         @NotNull @Min(2) @Max(10000) Integer totalNumbers,
-        @NotNull @Min(0) Integer rangeStart,
-        @NotNull @Min(1) Integer rangeEnd,
+        Integer rangeStart,
+        Integer rangeEnd,
         @NotNull @DecimalMin("0.01") BigDecimal pricePerNumber,
         LocalDateTime drawDateTime,
         String timezone,
