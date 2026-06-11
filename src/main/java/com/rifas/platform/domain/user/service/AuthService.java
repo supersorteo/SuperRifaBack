@@ -1,6 +1,8 @@
 package com.rifas.platform.domain.user.service;
 
+import com.rifas.platform.domain.user.dto.AdminLoginRequest;
 import com.rifas.platform.domain.organizer.entity.OrganizerProfile;
+import org.springframework.security.authentication.BadCredentialsException;
 import com.rifas.platform.domain.organizer.repository.OrganizerProfileRepository;
 import com.rifas.platform.domain.plan.entity.Plan;
 import com.rifas.platform.domain.plan.entity.Subscription;
@@ -95,6 +97,22 @@ public class AuthService {
         return buildTokenResponse(auth);
     }
 
+    public TokenResponse adminLogin(AdminLoginRequest req) {
+        User user = userRepository.findByFullNameIgnoreCase(req.username())
+                .orElseThrow(() -> new BadCredentialsException("Credenciales incorrectas"));
+
+        boolean isAdmin = user.getRoles().stream()
+                .anyMatch(r -> r.getName() == RoleName.ROLE_ADMIN);
+        if (!isAdmin) throw new BadCredentialsException("Credenciales incorrectas");
+
+        if (!passwordEncoder.matches(req.password(), user.getPasswordHash()))
+            throw new BadCredentialsException("Credenciales incorrectas");
+
+        UserDetailsImpl ud = UserDetailsImpl.build(user);
+        Authentication auth = new UsernamePasswordAuthenticationToken(ud, null, ud.getAuthorities());
+        return buildTokenResponse(auth);
+    }
+
     private TokenResponse buildTokenResponse(Authentication auth) {
         UserDetailsImpl ud = (UserDetailsImpl) auth.getPrincipal();
         String access  = jwtTokenProvider.generateAccessToken(auth);
@@ -103,6 +121,6 @@ public class AuthService {
                 .map(GrantedAuthority::getAuthority).collect(Collectors.toSet());
         return TokenResponse.of(access, refresh,
                 jwtProperties.getExpirationMs() / 1000L,
-                ud.getEmail(), ud.getUsername(), roles);
+                ud.getEmail(), ud.getFullName(), roles);
     }
 }

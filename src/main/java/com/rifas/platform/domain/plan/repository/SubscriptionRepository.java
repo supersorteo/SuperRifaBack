@@ -12,4 +12,5 @@ import java.util.UUID;
 public interface SubscriptionRepository extends JpaRepository<Subscription, UUID> {
     Optional<Subscription> findByOrganizerIdAndStatus(UUID organizerId, SubscriptionStatus status);
     Optional<Subscription> findByOrganizerId(UUID organizerId);
+    void deleteByOrganizerId(UUID organizerId);
 }

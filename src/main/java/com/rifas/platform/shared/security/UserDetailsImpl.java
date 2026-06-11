@@ -15,6 +15,7 @@ public class UserDetailsImpl implements UserDetails {
 
     private final UUID id;
     private final String email;
+    private final String fullName;
     private final String password;
     private final boolean active;
     private final Collection<? extends GrantedAuthority> authorities;
@@ -22,6 +23,7 @@ public class UserDetailsImpl implements UserDetails {
     private UserDetailsImpl(User user) {
         this.id = user.getId();
         this.email = user.getEmail();
+        this.fullName = user.getFullName();
         this.password = user.getPasswordHash();
         this.active = user.isActive();
         this.authorities = user.getRoles().stream()

@@ -1,5 +1,6 @@
 package com.rifas.platform.domain.user.controller;
 
+import com.rifas.platform.domain.user.dto.AdminLoginRequest;
 import com.rifas.platform.domain.user.dto.LoginRequest;
 import com.rifas.platform.domain.user.dto.RegisterRequest;
 import com.rifas.platform.domain.user.dto.TokenResponse;
@@ -25,5 +26,10 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest req) {
         return ResponseEntity.ok(authService.login(req));
+    }
+
+    @PostMapping("/admin/login")
+    public ResponseEntity<TokenResponse> adminLogin(@Valid @RequestBody AdminLoginRequest req) {
+        return ResponseEntity.ok(authService.adminLogin(req));
     }
 }

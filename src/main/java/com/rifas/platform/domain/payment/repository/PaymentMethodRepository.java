@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface PaymentMethodRepository extends JpaRepository<PaymentMethod, UUID> {
     List<PaymentMethod> findByOrganizerIdAndActiveTrueOrderByDisplayOrderAsc(UUID organizerId);
     List<PaymentMethod> findByOrganizerIdAndActiveAndPublicVisibleTrueOrderByDisplayOrderAsc(UUID organizerId, boolean active);
+    void deleteByOrganizerId(UUID organizerId);
 }

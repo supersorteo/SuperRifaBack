@@ -43,6 +43,8 @@ public interface RaffleRepository extends JpaRepository<Raffle, UUID> {
             @Param("now")       LocalDateTime now
     );
 
+    long countByOrganizerId(UUID organizerId);
+
     @Query("SELECT COUNT(r) FROM Raffle r WHERE r.organizer.id = :orgId AND r.publicationStatus = 'PUBLISHED' AND r.operationalStatus NOT IN ('FINISHED','CANCELLED')")
     long countActiveByOrganizerId(@Param("orgId") UUID orgId);
 
