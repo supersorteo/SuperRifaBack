@@ -53,6 +53,29 @@ public class CloudinaryService implements ImageStorageService {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public UploadResult uploadAvatar(MultipartFile file, UUID organizerId) throws IOException {
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("La imagen no puede superar 2 MB");
+        }
+        String publicId = props.getUploadFolder() + "/avatars/" + organizerId;
+        Map<String, Object> result = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                "public_id",     publicId,
+                "overwrite",     true,
+                "resource_type", "image",
+                "format",        "webp",
+                "transformation", ObjectUtils.asMap(
+                        "width",   400,
+                        "height",  400,
+                        "crop",    "fill",
+                        "gravity", "face",
+                        "quality", "auto:good"
+                )
+        ));
+        return new UploadResult(publicId, (String) result.get("secure_url"));
+    }
+
+    @Override
     public void delete(String publicId) {
         try {
             cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());

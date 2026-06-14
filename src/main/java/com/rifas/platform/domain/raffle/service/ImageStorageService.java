@@ -9,6 +9,8 @@ public interface ImageStorageService {
 
     UploadResult upload(MultipartFile file, UUID raffleId) throws IOException;
 
+    UploadResult uploadAvatar(MultipartFile file, UUID organizerId) throws IOException;
+
     void delete(String publicId);
 
     record UploadResult(String publicId, String url) {}

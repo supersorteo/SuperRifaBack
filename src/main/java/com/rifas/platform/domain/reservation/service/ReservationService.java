@@ -9,6 +9,7 @@ import com.rifas.platform.domain.raffle.entity.RaffleNumber;
 import com.rifas.platform.domain.raffle.repository.RaffleNumberRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleRepository;
 import com.rifas.platform.domain.reservation.dto.CreateReservationRequest;
+import com.rifas.platform.domain.reservation.dto.ReservationCreatedDto;
 import com.rifas.platform.domain.reservation.entity.Reservation;
 import com.rifas.platform.domain.reservation.repository.ReservationRepository;
 import com.rifas.platform.shared.audit.service.AuditService;
@@ -41,7 +42,7 @@ public class ReservationService {
     private final ReservationProperties reservationProps;
 
     @Transactional
-    public Reservation createReservation(CreateReservationRequest req) {
+    public ReservationCreatedDto createReservation(CreateReservationRequest req) {
         Raffle raffle = raffleRepository.findBySlugWithPessimisticLock(req.raffleSlug())
                 .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
 
@@ -97,7 +98,13 @@ public class ReservationService {
 
         auditService.log("RESERVATION_CREATED", "Reservation", reservation.getId(), null, nums.toString());
 
-        return reservation;
+        return new ReservationCreatedDto(
+                reservation.getId(),
+                reservation.getStatus(),
+                reservation.getTotalAmount(),
+                reservation.getExpiresAt(),
+                reservation.getCreatedAt()
+        );
     }
 
     private void validateRaffleAcceptsReservations(Raffle raffle) {

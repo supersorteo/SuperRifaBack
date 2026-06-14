@@ -70,6 +70,28 @@ public class LocalImageStorageService implements ImageStorageService {
     }
 
     @Override
+    public UploadResult uploadAvatar(MultipartFile file, UUID organizerId) throws IOException {
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("La imagen no puede superar 2 MB");
+        }
+        String contentType = file.getContentType();
+        String ext = ALLOWED_TYPES.get(contentType);
+        if (ext == null) {
+            throw new IllegalArgumentException("Tipo de archivo no permitido. Solo JPG, PNG o WebP.");
+        }
+        Path dir = Paths.get(uploadPath, "avatars", organizerId.toString()).normalize().toAbsolutePath();
+        Files.createDirectories(dir);
+        String filename = UUID.randomUUID() + ext;
+        Path dest = dir.resolve(filename);
+        if (!dest.normalize().toAbsolutePath().startsWith(dir)) {
+            throw new SecurityException("Ruta de destino inválida");
+        }
+        file.transferTo(dest);
+        String publicId = "avatars/" + organizerId + "/" + filename;
+        return new UploadResult(publicId, baseUrl + "/uploads/" + publicId);
+    }
+
+    @Override
     public void delete(String publicId) {
         try {
             // Guard: publicId must not escape uploadPath

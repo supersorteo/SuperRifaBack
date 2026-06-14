@@ -1,6 +1,7 @@
 package com.rifas.platform.domain.scheduler;
 
 import com.rifas.platform.domain.raffle.repository.RaffleNumberRepository;
+import com.rifas.platform.domain.reservation.repository.ReservationRepository;
 import com.rifas.platform.shared.enums.NumberStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,14 +17,19 @@ import java.time.LocalDateTime;
 public class ReservationExpiryScheduler {
 
     private final RaffleNumberRepository raffleNumberRepository;
+    private final ReservationRepository reservationRepository;
 
     @Scheduled(fixedDelayString = "${scheduler.expiry-check-ms:30000}")
     @Transactional
     public void expireStaleReservations() {
-        int expired = raffleNumberRepository.expireNumbersWithExpiredReservations(
-                LocalDateTime.now(), NumberStatus.RESERVED);
-        if (expired > 0) {
-            log.info("Expired {} reserved numbers back to AVAILABLE", expired);
+        LocalDateTime now = LocalDateTime.now();
+
+        int cancelledReservations = reservationRepository.expirePendingReservations(now);
+        int expiredNumbers = raffleNumberRepository.expireNumbersWithExpiredReservations(
+                now, NumberStatus.RESERVED);
+
+        if (cancelledReservations > 0 || expiredNumbers > 0) {
+            log.info("Expiry job: {} reservations cancelled, {} numbers freed", cancelledReservations, expiredNumbers);
         }
     }
 }

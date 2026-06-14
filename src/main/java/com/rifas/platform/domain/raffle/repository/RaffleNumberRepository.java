@@ -43,6 +43,9 @@ public interface RaffleNumberRepository extends JpaRepository<RaffleNumber, UUID
             @Param("status") NumberStatus status
     );
 
+    @Query("SELECT n FROM RaffleNumber n WHERE n.reservation.id = :reservationId ORDER BY n.number ASC")
+    List<RaffleNumber> findByReservationId(@Param("reservationId") UUID reservationId);
+
     void deleteByRaffle(Raffle raffle);
 
     boolean existsByRaffleAndNumber(Raffle raffle, Integer number);
