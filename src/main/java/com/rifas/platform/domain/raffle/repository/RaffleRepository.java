@@ -1,8 +1,6 @@
 package com.rifas.platform.domain.raffle.repository;
 
 import com.rifas.platform.domain.raffle.entity.Raffle;
-import com.rifas.platform.shared.enums.DrawMethod;
-import com.rifas.platform.shared.enums.OperationalStatus;
 import com.rifas.platform.shared.enums.PublicationStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -31,15 +29,19 @@ public interface RaffleRepository extends JpaRepository<Raffle, UUID> {
 
     @Query("""
         SELECT r FROM Raffle r
-        WHERE r.drawMethod = :method
-          AND r.publicationStatus = :pubStatus
-          AND r.operationalStatus = :opStatus
+        WHERE r.publicationStatus = :pubStatus
+          AND r.drawDateTime IS NOT NULL
           AND r.drawDateTime <= :now
+          AND r.operationalStatus NOT IN ('FINISHED', 'CANCELLED', 'EXECUTING')
+          AND r.winnerNumber IS NULL
+          AND EXISTS (
+            SELECT 1 FROM RaffleNumber rn
+            WHERE rn.raffle = r
+              AND rn.status = com.rifas.platform.shared.enums.NumberStatus.RESERVED
+          )
         """)
-    List<Raffle> findRafflesReadyForAutomaticDraw(
-            @Param("method")    DrawMethod method,
+    List<Raffle> findRafflesReadyForScheduledDraw(
             @Param("pubStatus") PublicationStatus pubStatus,
-            @Param("opStatus")  OperationalStatus opStatus,
             @Param("now")       LocalDateTime now
     );
 

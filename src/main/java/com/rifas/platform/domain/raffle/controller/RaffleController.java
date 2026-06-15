@@ -41,6 +41,11 @@ public class RaffleController {
         return ResponseEntity.ok(raffleService.pause(id));
     }
 
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<OrganizerRaffleResponse> cancel(@PathVariable UUID id) {
+        return ResponseEntity.ok(raffleService.cancel(id));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         raffleService.delete(id);

@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -61,8 +62,9 @@ public class RaffleExecutionService {
             throw new BusinessException("La rifa debe estar publicada para ejecutar el sorteo");
         }
         if (raffle.getOperationalStatus() == OperationalStatus.FINISHED
-                || raffle.getOperationalStatus() == OperationalStatus.CANCELLED) {
-            throw new BusinessException("La rifa ya finalizó");
+                || raffle.getOperationalStatus() == OperationalStatus.CANCELLED
+                || raffle.getWinnerNumber() != null) {
+            throw new BusinessException("La rifa ya finalizo y ya tiene un ganador");
         }
         if (executionRepository.existsByRaffle(raffle)) {
             throw new BusinessException("La rifa ya tiene un sorteo registrado");
@@ -71,12 +73,13 @@ public class RaffleExecutionService {
         List<Integer> eligible = buildEligibleNumbers(raffle);
 
         raffle.setOperationalStatus(OperationalStatus.EXECUTING);
-        raffleRepository.save(raffle);
+        raffleRepository.saveAndFlush(raffle);
         eventPublisher.publishDrawStarted(raffle.getId());
 
-        DrawStrategy strategy = resolveStrategy(raffle.getDrawMethod());
+        DrawStrategy strategy = resolveStrategy(method);
         DrawResult result;
         try {
+            publishLiveCountdown(raffle.getId());
             result = strategy.execute(raffle, eligible, executedBy);
         } catch (Exception ex) {
             raffle.setOperationalStatus(OperationalStatus.ACTIVE);
@@ -105,49 +108,110 @@ public class RaffleExecutionService {
         raffle.setExecutedAt(LocalDateTime.now());
         raffle.setOperationalStatus(OperationalStatus.FINISHED);
 
-        resolveWinnerReservation(raffle, result.drawnNumber());
+        WinnerContact winnerContact = resolveWinnerReservation(raffle, result.drawnNumber());
+        closeLosingReservations(raffle);
 
         raffleRepository.save(raffle);
+        publishProgressSnapshot(raffle);
 
-        eventPublisher.publishDrawCompleted(raffle.getId(), result.drawnNumber(), null);
+        eventPublisher.publishDrawCompleted(
+                raffle.getId(),
+                result.drawnNumber(),
+                winnerContact != null ? winnerContact.name() : null,
+                winnerContact != null ? winnerContact.phone() : null
+        );
         auditService.log("DRAW_COMPLETED", "Raffle", raffleId, null,
                 "winner=" + result.drawnNumber() + " method=" + method);
 
         return execution;
     }
 
-    private List<Integer> buildEligibleNumbers(Raffle raffle) {
-        List<NumberStatus> eligibleStatuses = raffle.getDrawPolicy() == DrawPolicy.PAID_ONLY
-                ? List.of(NumberStatus.PAID)
-                : List.of(NumberStatus.PAID, NumberStatus.RESERVED, NumberStatus.PENDING_PAYMENT);
+    private void publishLiveCountdown(UUID raffleId) {
+        for (long seconds = 5; seconds >= 1; seconds--) {
+            eventPublisher.publishCountdown(raffleId, seconds);
+            try {
+                TimeUnit.SECONDS.sleep(1);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new BusinessException("La ejecucion del sorteo fue interrumpida");
+            }
+        }
+    }
 
-        List<RaffleNumber> numbers = raffleNumberRepository.findByRaffleOrderByNumberAsc(raffle);
-        List<Integer> eligible = numbers.stream()
-                .filter(n -> eligibleStatuses.contains(n.getStatus()))
+    private List<Integer> buildEligibleNumbers(Raffle raffle) {
+        List<Integer> eligible = raffleNumberRepository.findByRaffleOrderByNumberAsc(raffle).stream()
+                .filter(n -> n.getStatus() == NumberStatus.RESERVED)
                 .map(RaffleNumber::getNumber)
                 .toList();
 
         if (eligible.isEmpty()) {
-            throw new BusinessException("No hay números elegibles para el sorteo según la política configurada");
+            throw new BusinessException("La rifa debe tener al menos un numero reservado antes de ejecutar el sorteo");
         }
         return eligible;
     }
 
-    private void resolveWinnerReservation(Raffle raffle, int winnerNumber) {
-        raffleNumberRepository.findByRaffleOrderByNumberAsc(raffle).stream()
+    private WinnerContact resolveWinnerReservation(Raffle raffle, int winnerNumber) {
+        return raffleNumberRepository.findByRaffleOrderByNumberAsc(raffle).stream()
                 .filter(n -> n.getNumber() == winnerNumber && n.getReservation() != null)
                 .findFirst()
-                .ifPresent(n -> {
+                .map(n -> {
+                    n.setStatus(NumberStatus.WINNER);
                     Reservation res = n.getReservation();
                     raffle.setWinnerReservationId(res.getId());
-                });
+                    res.setStatus(ReservationStatus.CONFIRMED);
+                    res.setExpiresAt(null);
+                    return res.getParticipant() != null
+                            ? new WinnerContact(res.getParticipant().getFullName(), res.getParticipant().getPhone())
+                            : null;
+                })
+                .orElse(null);
     }
+
+    private void closeLosingReservations(Raffle raffle) {
+        UUID winnerReservationId = raffle.getWinnerReservationId();
+        List<Reservation> reservations = reservationRepository.findByRaffleId(raffle.getId());
+        for (Reservation reservation : reservations) {
+            if (winnerReservationId != null && winnerReservationId.equals(reservation.getId())) {
+                continue;
+            }
+            if (reservation.getStatus() == ReservationStatus.PENDING) {
+                reservation.setStatus(ReservationStatus.CANCELLED);
+                reservation.setExpiresAt(null);
+            }
+        }
+        reservationRepository.saveAll(reservations);
+
+        List<RaffleNumber> numbers = raffleNumberRepository.findByRaffleOrderByNumberAsc(raffle);
+        for (RaffleNumber number : numbers) {
+            if (number.getReservation() == null) {
+                continue;
+            }
+            if (winnerReservationId != null && winnerReservationId.equals(number.getReservation().getId())) {
+                continue;
+            }
+            if (number.getStatus() == NumberStatus.RESERVED || number.getStatus() == NumberStatus.PENDING_PAYMENT) {
+                number.setStatus(NumberStatus.CANCELLED);
+                number.setExpiresAt(null);
+            }
+        }
+        raffleNumberRepository.saveAll(numbers);
+    }
+
+    private void publishProgressSnapshot(Raffle raffle) {
+        long available = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.AVAILABLE);
+        long reserved = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.RESERVED);
+        long paid = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.PAID)
+                + raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.WINNER);
+        eventPublisher.publishNumbersUpdated(raffle.getId(), (int) available, (int) reserved, (int) paid);
+    }
+
+    private record WinnerContact(String name, String phone) {}
 
     private DrawStrategy resolveStrategy(DrawMethod method) {
         return switch (method) {
-            case MANUAL    -> manualStrategy;
+            case MANUAL -> manualStrategy;
             case AUTOMATIC -> automaticStrategy;
-            case EXTERNAL  -> externalStrategy;
+            case EXTERNAL -> externalStrategy;
         };
     }
 }

@@ -24,12 +24,12 @@ public class ReservationExpiryScheduler {
     public void expireStaleReservations() {
         LocalDateTime now = LocalDateTime.now();
 
-        int cancelledReservations = reservationRepository.expirePendingReservations(now);
+        int expiredReservations = reservationRepository.expirePendingReservations(now);
         int expiredNumbers = raffleNumberRepository.expireNumbersWithExpiredReservations(
                 now, NumberStatus.RESERVED);
 
-        if (cancelledReservations > 0 || expiredNumbers > 0) {
-            log.info("Expiry job: {} reservations cancelled, {} numbers freed", cancelledReservations, expiredNumbers);
+        if (expiredReservations > 0 || expiredNumbers > 0) {
+            log.info("Expiry job: {} reservations expired, {} numbers freed", expiredReservations, expiredNumbers);
         }
     }
 }

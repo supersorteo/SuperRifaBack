@@ -8,6 +8,7 @@ import com.rifas.platform.domain.raffle.entity.Raffle;
 import com.rifas.platform.domain.raffle.entity.RaffleNumber;
 import com.rifas.platform.domain.raffle.repository.RaffleNumberRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleRepository;
+import com.rifas.platform.domain.execution.service.RaffleExecutionService;
 import com.rifas.platform.domain.reservation.dto.CreateReservationRequest;
 import com.rifas.platform.domain.reservation.dto.ReservationCreatedDto;
 import com.rifas.platform.domain.reservation.entity.Reservation;
@@ -40,6 +41,7 @@ public class ReservationService {
     private final RaffleEventPublisher eventPublisher;
     private final AuditService auditService;
     private final ReservationProperties reservationProps;
+    private final RaffleExecutionService raffleExecutionService;
 
     @Transactional
     public ReservationCreatedDto createReservation(CreateReservationRequest req) {
@@ -95,6 +97,10 @@ public class ReservationService {
         List<Integer> nums = reserved.stream().map(RaffleNumber::getNumber).toList();
         eventPublisher.publishNumbersReserved(raffle.getId(), nums);
         eventPublisher.publishNumbersUpdated(raffle.getId(), (int) available, (int) reservedCount, (int) paid);
+
+        if (available == 0 && reservedCount > 0 && raffle.getWinnerNumber() == null) {
+            raffleExecutionService.executeAutomaticDraw(raffle.getId());
+        }
 
         auditService.log("RESERVATION_CREATED", "Reservation", reservation.getId(), null, nums.toString());
 

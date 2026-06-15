@@ -3,8 +3,6 @@ package com.rifas.platform.domain.scheduler;
 import com.rifas.platform.domain.execution.service.RaffleExecutionService;
 import com.rifas.platform.domain.raffle.entity.Raffle;
 import com.rifas.platform.domain.raffle.repository.RaffleRepository;
-import com.rifas.platform.shared.enums.DrawMethod;
-import com.rifas.platform.shared.enums.OperationalStatus;
 import com.rifas.platform.shared.enums.PublicationStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,10 +22,8 @@ public class AutomaticDrawScheduler {
 
     @Scheduled(fixedDelayString = "${scheduler.draw-check-ms:60000}")
     public void checkAndExecuteAutomaticDraws() {
-        List<Raffle> ready = raffleRepository.findRafflesReadyForAutomaticDraw(
-                DrawMethod.AUTOMATIC,
+        List<Raffle> ready = raffleRepository.findRafflesReadyForScheduledDraw(
                 PublicationStatus.PUBLISHED,
-                OperationalStatus.ACTIVE,
                 LocalDateTime.now()
         );
 

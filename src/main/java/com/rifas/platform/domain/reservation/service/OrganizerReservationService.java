@@ -34,10 +34,16 @@ public class OrganizerReservationService {
     private final RaffleEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
-    public Page<OrganizerReservationDto> listReservations(UUID raffleId, ReservationStatus status, Pageable pageable) {
+    public Page<OrganizerReservationDto> listReservations(UUID raffleId, String phone, ReservationStatus status, Pageable pageable) {
         UUID organizerId = currentOrganizer().getId();
         return reservationRepository
-                .findByOrganizerWithDetails(organizerId, raffleId, status, pageable)
+                .findByOrganizerWithDetails(
+                        organizerId,
+                        raffleId,
+                        phone != null && !phone.isBlank() ? phone.trim() : "",
+                        status,
+                        pageable
+                )
                 .map(this::toDto);
     }
 

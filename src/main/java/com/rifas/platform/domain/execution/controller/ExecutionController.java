@@ -1,8 +1,8 @@
 package com.rifas.platform.domain.execution.controller;
 
-import com.rifas.platform.domain.execution.entity.RaffleExecution;
 import com.rifas.platform.domain.execution.service.RaffleExecutionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +18,8 @@ public class ExecutionController {
 
     @PostMapping("/execute")
     @PreAuthorize("hasAnyRole('ORGANIZER','ADMIN')")
-    public ResponseEntity<RaffleExecution> executeManual(@PathVariable UUID raffleId) {
-        return ResponseEntity.ok(executionService.executeManualDraw(raffleId));
+    public ResponseEntity<Void> executeManual(@PathVariable UUID raffleId) {
+        executionService.executeManualDraw(raffleId);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 }

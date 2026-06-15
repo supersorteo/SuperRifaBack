@@ -24,18 +24,31 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     @Query("SELECT COUNT(DISTINCT r.participant.id) FROM Reservation r WHERE r.raffle.id = :raffleId")
     long countDistinctParticipantsByRaffleId(@Param("raffleId") UUID raffleId);
 
-    @Query("""
-        SELECT r FROM Reservation r
-        JOIN FETCH r.participant
-        JOIN FETCH r.raffle rf
-        WHERE rf.organizer.id = :organizerId
-          AND (:raffleId IS NULL OR rf.id = :raffleId)
-          AND (:status IS NULL OR r.status = :status)
-        ORDER BY r.createdAt DESC
-        """)
+    @Query(
+        value = """
+            SELECT r FROM Reservation r
+            JOIN FETCH r.participant p
+            JOIN FETCH r.raffle rf
+            WHERE rf.organizer.id = :organizerId
+              AND (:raffleId IS NULL OR rf.id = :raffleId)
+              AND (:phone = '' OR p.phone LIKE CONCAT('%', :phone, '%'))
+              AND (:status IS NULL OR r.status = :status)
+            ORDER BY r.createdAt DESC
+            """,
+        countQuery = """
+            SELECT COUNT(r) FROM Reservation r
+            JOIN r.participant p
+            JOIN r.raffle rf
+            WHERE rf.organizer.id = :organizerId
+              AND (:raffleId IS NULL OR rf.id = :raffleId)
+              AND (:phone = '' OR p.phone LIKE CONCAT('%', :phone, '%'))
+              AND (:status IS NULL OR r.status = :status)
+            """
+    )
     Page<Reservation> findByOrganizerWithDetails(
             @Param("organizerId") UUID organizerId,
             @Param("raffleId") UUID raffleId,
+            @Param("phone") String phone,
             @Param("status") ReservationStatus status,
             Pageable pageable
     );
@@ -60,7 +73,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
 
     @Modifying
     @Query("""
-        UPDATE Reservation r SET r.status = 'CANCELLED'
+        UPDATE Reservation r SET r.status = 'EXPIRED'
         WHERE r.status = 'PENDING' AND r.expiresAt < :now
         """)
     int expirePendingReservations(@Param("now") LocalDateTime now);

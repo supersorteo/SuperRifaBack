@@ -30,11 +30,13 @@ public class RaffleEventPublisher {
         );
     }
 
-    public void publishDrawCompleted(UUID raffleId, Integer winnerNumber, String winnerName) {
+    public void publishDrawCompleted(UUID raffleId, Integer winnerNumber, String winnerName, String winnerPhone) {
         messaging.convertAndSend(
                 "/topic/raffle/" + raffleId + "/result",
                 Map.of("raffleId", raffleId, "winnerNumber", winnerNumber,
-                        "winnerName", winnerName != null ? winnerName : "", "ts", Instant.now())
+                        "winnerName", winnerName != null ? winnerName : "",
+                        "winnerPhone", winnerPhone != null ? winnerPhone : "",
+                        "ts", Instant.now())
         );
     }
 

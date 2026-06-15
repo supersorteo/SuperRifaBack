@@ -4,6 +4,7 @@ import com.rifas.platform.domain.organizer.entity.OrganizerProfile;
 import com.rifas.platform.domain.organizer.repository.OrganizerProfileRepository;
 import com.rifas.platform.domain.execution.entity.RaffleExecution;
 import com.rifas.platform.domain.execution.repository.RaffleExecutionRepository;
+import com.rifas.platform.domain.notification.websocket.RaffleEventPublisher;
 import com.rifas.platform.domain.payment.entity.PaymentMethod;
 import com.rifas.platform.domain.payment.repository.PaymentMethodRepository;
 import com.rifas.platform.domain.raffle.dto.CreateRaffleRequest;
@@ -49,6 +50,7 @@ public class RaffleService {
     private final PaymentMethodRepository paymentMethodRepository;
     private final AuditService auditService;
     private final ImageStorageService imageStorageService;
+    private final RaffleEventPublisher eventPublisher;
 
     public OrganizerRaffleResponse create(CreateRaffleRequest req) {
         OrganizerProfile organizer = currentOrganizer();
@@ -67,7 +69,7 @@ public class RaffleService {
                 .drawDateTime(req.drawDateTime())
                 .timezone(req.timezone() != null ? req.timezone() : "America/Argentina/Buenos_Aires")
                 .drawMethod(req.drawMethod() != null ? req.drawMethod() : DrawMethod.MANUAL)
-                .drawPolicy(req.drawPolicy() != null ? req.drawPolicy() : DrawPolicy.PAID_ONLY)
+                .drawPolicy(req.drawPolicy() != null ? req.drawPolicy() : DrawPolicy.ALL_NUMBERS)
                 .termsAndConditions(req.termsAndConditions())
                 .build();
 
@@ -100,8 +102,13 @@ public class RaffleService {
 
     public OrganizerRaffleResponse publish(UUID raffleId) {
         Raffle raffle = findOwnedRaffle(raffleId);
-        if (raffle.getPublicationStatus() != PublicationStatus.DRAFT) {
-            throw new BusinessException("Solo se pueden publicar rifas en borrador");
+        if (raffle.getOperationalStatus() == OperationalStatus.CANCELLED
+                || raffle.getOperationalStatus() == OperationalStatus.FINISHED) {
+            throw new BusinessException("No se puede publicar una rifa finalizada o cancelada");
+        }
+        if (raffle.getPublicationStatus() != PublicationStatus.DRAFT
+                && raffle.getPublicationStatus() != PublicationStatus.PAUSED) {
+            throw new BusinessException("Solo se pueden publicar rifas en borrador o pausadas");
         }
         raffle.setPublicationStatus(PublicationStatus.PUBLISHED);
         auditService.log("RAFFLE_PUBLISHED", "Raffle", raffleId, null, null);
@@ -110,8 +117,51 @@ public class RaffleService {
 
     public OrganizerRaffleResponse pause(UUID raffleId) {
         Raffle raffle = findOwnedRaffle(raffleId);
+        if (raffle.getPublicationStatus() != PublicationStatus.PUBLISHED) {
+            throw new BusinessException("Solo se pueden pausar rifas publicadas");
+        }
+        if (raffle.getOperationalStatus() == OperationalStatus.CANCELLED
+                || raffle.getOperationalStatus() == OperationalStatus.FINISHED) {
+            throw new BusinessException("No se puede pausar una rifa finalizada o cancelada");
+        }
         raffle.setPublicationStatus(PublicationStatus.PAUSED);
         return toOrganizerResponse(raffleRepository.save(raffle));
+    }
+
+    public OrganizerRaffleResponse cancel(UUID raffleId) {
+        Raffle raffle = findOwnedRaffle(raffleId);
+
+        if (raffle.getOperationalStatus() == OperationalStatus.FINISHED) {
+            throw new BusinessException("No se puede cancelar una rifa que ya finalizo");
+        }
+        if (raffle.getOperationalStatus() == OperationalStatus.CANCELLED) {
+            throw new BusinessException("La rifa ya esta cancelada");
+        }
+
+        raffle.setPublicationStatus(PublicationStatus.CLOSED);
+        raffle.setOperationalStatus(OperationalStatus.CANCELLED);
+
+        List<Reservation> reservations = reservationRepository.findByRaffleId(raffleId);
+        for (Reservation reservation : reservations) {
+            if (reservation.getStatus() != ReservationStatus.EXPIRED
+                    && reservation.getStatus() != ReservationStatus.CANCELLED) {
+                reservation.setStatus(ReservationStatus.CANCELLED);
+                reservation.setExpiresAt(null);
+            }
+        }
+        reservationRepository.saveAll(reservations);
+
+        List<RaffleNumber> numbers = raffleNumberRepository.findByRaffleOrderByNumberAsc(raffle);
+        for (RaffleNumber number : numbers) {
+            number.setStatus(NumberStatus.CANCELLED);
+            number.setExpiresAt(null);
+        }
+        raffleNumberRepository.saveAll(numbers);
+
+        Raffle saved = raffleRepository.save(raffle);
+        eventPublisher.publishNumbersUpdated(saved.getId(), 0, 0, 0);
+        auditService.log("RAFFLE_CANCELLED", "Raffle", raffleId, null, saved.getTitle());
+        return toOrganizerResponse(saved);
     }
 
     public void delete(UUID raffleId) {
@@ -248,6 +298,16 @@ public class RaffleService {
 
     private OrganizerRaffleResponse toOrganizerResponse(Raffle raffle) {
         long participantCount = reservationRepository.countDistinctParticipantsByRaffleId(raffle.getId());
+        long reservedCount = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.RESERVED);
+        Reservation winnerReservation = raffle.getWinnerReservationId() != null
+                ? reservationRepository.findById(raffle.getWinnerReservationId()).orElse(null)
+                : null;
+        String winnerName = winnerReservation != null && winnerReservation.getParticipant() != null
+                ? winnerReservation.getParticipant().getFullName()
+                : null;
+        String winnerPhone = winnerReservation != null && winnerReservation.getParticipant() != null
+                ? winnerReservation.getParticipant().getPhone()
+                : null;
 
         return new OrganizerRaffleResponse(
                 raffle.getId(),
@@ -255,8 +315,12 @@ public class RaffleService {
                 raffle.getSlug(),
                 raffle.getPrize() != null ? raffle.getPrize().getName() : null,
                 participantCount,
+                reservedCount,
                 raffle.getPublicationStatus(),
                 raffle.getOperationalStatus(),
+                raffle.getWinnerNumber(),
+                winnerName,
+                winnerPhone,
                 raffle.getTotalNumbers(),
                 raffle.getPricePerNumber(),
                 raffle.getDrawDateTime(),

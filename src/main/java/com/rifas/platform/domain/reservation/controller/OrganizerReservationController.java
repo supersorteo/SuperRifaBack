@@ -23,10 +23,11 @@ public class OrganizerReservationController {
     @GetMapping
     public ResponseEntity<Page<OrganizerReservationDto>> list(
             @RequestParam(required = false) UUID raffleId,
+            @RequestParam(required = false) String phone,
             @RequestParam(required = false) ReservationStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ResponseEntity.ok(reservationService.listReservations(raffleId, status, pageable));
+        return ResponseEntity.ok(reservationService.listReservations(raffleId, phone, status, pageable));
     }
 
     @PutMapping("/{id}/confirm")

@@ -79,7 +79,7 @@ public class Raffle {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private DrawPolicy drawPolicy = DrawPolicy.PAID_ONLY;
+    private DrawPolicy drawPolicy = DrawPolicy.ALL_NUMBERS;
 
     @Column(columnDefinition = "TEXT")
     private String termsAndConditions;
