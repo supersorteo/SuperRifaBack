@@ -34,6 +34,7 @@ import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.IntStream;
 
 @Service
@@ -60,6 +61,7 @@ public class RaffleService {
         Raffle raffle = Raffle.builder()
                 .title(req.title())
                 .slug(slug)
+                .internalCode(generateUniqueInternalCode())
                 .description(req.description())
                 .organizer(organizer)
                 .totalNumbers(req.totalNumbers())
@@ -105,6 +107,9 @@ public class RaffleService {
         if (raffle.getOperationalStatus() == OperationalStatus.CANCELLED
                 || raffle.getOperationalStatus() == OperationalStatus.FINISHED) {
             throw new BusinessException("No se puede publicar una rifa finalizada o cancelada");
+        }
+        if (raffle.getInternalCode() == null || raffle.getInternalCode().isBlank()) {
+            raffle.setInternalCode(generateUniqueInternalCode());
         }
         if (raffle.getPublicationStatus() != PublicationStatus.DRAFT
                 && raffle.getPublicationStatus() != PublicationStatus.PAUSED) {
@@ -313,6 +318,7 @@ public class RaffleService {
                 raffle.getId(),
                 raffle.getTitle(),
                 raffle.getSlug(),
+                raffle.getInternalCode(),
                 raffle.getPrize() != null ? raffle.getPrize().getName() : null,
                 participantCount,
                 reservedCount,
@@ -333,6 +339,15 @@ public class RaffleService {
                                 image.getDisplayOrder()))
                         .toList()
         );
+    }
+
+    private String generateUniqueInternalCode() {
+        String code;
+        do {
+            int value = ThreadLocalRandom.current().nextInt(100000, 999999);
+            code = "RIFA-" + value;
+        } while (raffleRepository.existsByInternalCode(code));
+        return code;
     }
 
 }

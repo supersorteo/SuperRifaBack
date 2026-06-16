@@ -21,6 +21,8 @@ public interface RaffleRepository extends JpaRepository<Raffle, UUID> {
 
     boolean existsBySlug(String slug);
 
+    boolean existsByInternalCode(String internalCode);
+
     List<Raffle> findByOrganizerIdOrderByCreatedAtDesc(UUID organizerId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

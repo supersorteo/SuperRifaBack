@@ -1,6 +1,7 @@
 package com.rifas.platform.domain.reservation.service;
 
 import com.rifas.platform.config.ReservationProperties;
+import com.rifas.platform.domain.execution.service.RaffleExecutionService;
 import com.rifas.platform.domain.notification.websocket.RaffleEventPublisher;
 import com.rifas.platform.domain.participant.entity.Participant;
 import com.rifas.platform.domain.participant.repository.ParticipantRepository;
@@ -8,7 +9,6 @@ import com.rifas.platform.domain.raffle.entity.Raffle;
 import com.rifas.platform.domain.raffle.entity.RaffleNumber;
 import com.rifas.platform.domain.raffle.repository.RaffleNumberRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleRepository;
-import com.rifas.platform.domain.execution.service.RaffleExecutionService;
 import com.rifas.platform.domain.reservation.dto.CreateReservationRequest;
 import com.rifas.platform.domain.reservation.dto.ReservationCreatedDto;
 import com.rifas.platform.domain.reservation.entity.Reservation;
@@ -49,6 +49,7 @@ public class ReservationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
 
         validateRaffleAcceptsReservations(raffle);
+        validateAccessCode(raffle, req.accessCode());
 
         Participant participant = findOrCreateParticipant(req.participant());
 
@@ -72,7 +73,7 @@ public class ReservationService {
         for (Integer num : req.numbers()) {
             RaffleNumber rn = raffleNumberRepository
                     .findByRaffleAndNumberWithLock(raffle, num)
-                    .orElseThrow(() -> new ResourceNotFoundException("Número no existe: " + num));
+                    .orElseThrow(() -> new ResourceNotFoundException("Numero no existe: " + num));
 
             if (rn.getStatus() != NumberStatus.AVAILABLE) {
                 throw new NumberNotAvailableException(num);
@@ -86,7 +87,7 @@ public class ReservationService {
         }
 
         long available = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.AVAILABLE);
-        long paid      = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.PAID);
+        long paid = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.PAID);
         long reservedCount = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.RESERVED);
 
         if (available == 0) {
@@ -115,14 +116,26 @@ public class ReservationService {
 
     private void validateRaffleAcceptsReservations(Raffle raffle) {
         if (raffle.getPublicationStatus() != PublicationStatus.PUBLISHED) {
-            throw new BusinessException("La rifa no está disponible");
+            throw new BusinessException("La rifa no esta disponible");
         }
         if (raffle.getOperationalStatus() == OperationalStatus.FINISHED
                 || raffle.getOperationalStatus() == OperationalStatus.CANCELLED) {
             throw new BusinessException("La rifa ya ha finalizado");
         }
         if (raffle.getOperationalStatus() == OperationalStatus.SOLD_OUT) {
-            throw new BusinessException("La rifa está agotada");
+            throw new BusinessException("La rifa esta agotada");
+        }
+    }
+
+    private void validateAccessCode(Raffle raffle, String accessCode) {
+        String expected = raffle.getInternalCode();
+        String received = accessCode != null ? accessCode.trim() : "";
+
+        if (expected == null || expected.isBlank()) {
+            throw new BusinessException("La rifa no tiene un codigo de acceso configurado");
+        }
+        if (!expected.equalsIgnoreCase(received)) {
+            throw new BusinessException("El codigo de acceso de la rifa no es valido");
         }
     }
 

@@ -10,6 +10,7 @@ public record CreateReservationRequest(
         @NotBlank String raffleSlug,
         @NotEmpty @Size(min = 1, max = 10) List<@Positive Integer> numbers,
         @NotNull @Valid ParticipantDataRequest participant,
+        @NotBlank @Size(max = 30) String accessCode,
         UUID paymentMethodId
 ) {
     public record ParticipantDataRequest(

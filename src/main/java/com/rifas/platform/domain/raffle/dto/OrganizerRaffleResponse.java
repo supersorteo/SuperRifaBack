@@ -12,6 +12,7 @@ public record OrganizerRaffleResponse(
         UUID id,
         String title,
         String slug,
+        String reservationAccessCode,
         String prizeName,
         long participantCount,
         long reservedCount,
