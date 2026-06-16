@@ -94,16 +94,31 @@ public class LocalImageStorageService implements ImageStorageService {
     @Override
     public void delete(String publicId) {
         try {
+            String resolvedPublicId = resolveLocalPublicId(publicId);
+            if (resolvedPublicId == null || resolvedPublicId.isBlank()) {
+                log.warn("No se pudo resolver la referencia local de imagen: {}", publicId);
+                return;
+            }
             // Guard: publicId must not escape uploadPath
             Path base = Paths.get(uploadPath).normalize().toAbsolutePath();
-            Path target = base.resolve(publicId).normalize().toAbsolutePath();
+            Path target = base.resolve(resolvedPublicId).normalize().toAbsolutePath();
             if (!target.startsWith(base)) {
-                log.warn("Intento de path traversal en delete: {}", publicId);
+                log.warn("Intento de path traversal en delete: {}", resolvedPublicId);
                 return;
             }
             Files.deleteIfExists(target);
         } catch (IOException e) {
             log.warn("No se pudo eliminar imagen local: {}", publicId);
         }
+    }
+
+    private String resolveLocalPublicId(String reference) {
+        if (reference == null || reference.isBlank()) return null;
+        String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        String uploadsPrefix = normalizedBaseUrl + "/uploads/";
+        if (reference.startsWith(uploadsPrefix)) {
+            return reference.substring(uploadsPrefix.length());
+        }
+        return reference;
     }
 }

@@ -59,24 +59,37 @@ public class OrganizerProfileController {
         profile.setBio(req.bio());
         profile.setInstagramHandle(req.instagramHandle());
         profile.setWhatsappNumber(req.whatsappNumber());
-        return ResponseEntity.ok(toDto(profileRepository.save(profile)));
+        profileRepository.save(profile);
+        return ResponseEntity.ok(toDto(reloadProfile(profile.getUser().getId())));
     }
 
     @PostMapping("/avatar")
     public ResponseEntity<OrganizerProfileDto> uploadAvatar(@RequestParam("file") MultipartFile file) throws IOException {
         OrganizerProfile profile = currentProfile();
-        if (profile.getAvatarUrl() != null && !profile.getAvatarUrl().isBlank()) {
-            try { imageStorageService.delete(profile.getAvatarUrl()); } catch (Exception ignored) {}
+        String previousAvatarRef = profile.getAvatarPublicId();
+        if ((previousAvatarRef == null || previousAvatarRef.isBlank())
+                && profile.getAvatarUrl() != null
+                && !profile.getAvatarUrl().isBlank()) {
+            previousAvatarRef = profile.getAvatarUrl();
+        }
+        if (previousAvatarRef != null && !previousAvatarRef.isBlank()) {
+            try { imageStorageService.delete(previousAvatarRef); } catch (Exception ignored) {}
         }
         ImageStorageService.UploadResult result = imageStorageService.uploadAvatar(file, profile.getId());
+        profile.setAvatarPublicId(result.publicId());
         profile.setAvatarUrl(result.url());
-        return ResponseEntity.ok(toDto(profileRepository.save(profile)));
+        profileRepository.save(profile);
+        return ResponseEntity.ok(toDto(reloadProfile(profile.getUser().getId())));
     }
 
     private OrganizerProfile currentProfile() {
         UserDetailsImpl ud = (UserDetailsImpl) SecurityContextHolder
                 .getContext().getAuthentication().getPrincipal();
-        return profileRepository.findByUserId(ud.getId())
+        return reloadProfile(ud.getId());
+    }
+
+    private OrganizerProfile reloadProfile(UUID userId) {
+        return profileRepository.findByUserIdWithUser(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Perfil no encontrado"));
     }
 

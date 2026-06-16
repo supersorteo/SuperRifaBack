@@ -33,6 +33,7 @@ public class OrganizerProfile {
     @Column(columnDefinition = "TEXT")
     private String bio;
 
+    private String avatarPublicId;
     private String avatarUrl;
     private String instagramHandle;
     private String whatsappNumber;
