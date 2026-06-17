@@ -30,9 +30,10 @@ public class WebhookController {
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) payload.get("data");
+            String mpUserId = payload.get("user_id") != null ? payload.get("user_id").toString() : null;
             if (data != null && data.get("id") != null) {
                 String dataId = data.get("id").toString();
-                mercadoPagoService.processWebhook(dataId, xSignature, xRequestId);
+                mercadoPagoService.processWebhook(dataId, mpUserId, xSignature, xRequestId);
             }
         } catch (Exception ex) {
             log.error("Webhook processing error: {}", ex.getMessage());

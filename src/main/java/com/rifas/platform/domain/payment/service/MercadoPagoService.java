@@ -94,24 +94,39 @@ public class MercadoPagoService {
         }
     }
 
-    public void processWebhook(String dataId, String xSignature, String xRequestId) {
+    public void processWebhook(String dataId, String mpUserId, String xSignature, String xRequestId) {
         if (mpProps.getWebhookSecret() != null && !mpProps.getWebhookSecret().isBlank()) {
             validateWebhookSignature(dataId, xSignature, xRequestId);
         }
 
-        // Webhook usa el token de la plataforma para verificar el pago
-        MPRequestOptions opts = MPRequestOptions.builder()
-                .accessToken(mpProps.getAccessToken())
-                .build();
+        String accessToken = resolveWebhookToken(mpUserId);
+        if (accessToken == null) {
+            log.warn("No se encontró organizador para MP user_id={}, pago={}", mpUserId, dataId);
+            return;
+        }
+
+        MPRequestOptions opts = MPRequestOptions.builder().accessToken(accessToken).build();
         try {
             PaymentClient client = new PaymentClient();
             Payment mpPayment = client.get(Long.parseLong(dataId), opts);
-
             PaymentStatus status = mapMpStatus(mpPayment.getStatus());
             paymentService.syncFromWebhook(dataId, status, mpPayment.getStatus());
-
         } catch (MPApiException | MPException ex) {
             log.error("Failed to process MP webhook for payment {}: {}", dataId, ex.getMessage());
+        }
+    }
+
+    private String resolveWebhookToken(String mpUserId) {
+        if (mpUserId == null) return null;
+        var pm = paymentMethodRepo.findFirstActiveMpByMpUserId(mpUserId).orElse(null);
+        if (pm == null || pm.getIntegrationMetadata() == null) return null;
+        try {
+            var meta = objectMapper.readValue(pm.getIntegrationMetadata(),
+                    new TypeReference<java.util.Map<String, String>>() {});
+            return meta.get("accessToken");
+        } catch (Exception ex) {
+            log.warn("Could not parse integrationMetadata for mp_user_id {}: {}", mpUserId, ex.getMessage());
+            return null;
         }
     }
 

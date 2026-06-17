@@ -13,10 +13,12 @@ import com.rifas.platform.shared.security.UserDetailsImpl;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 import java.util.UUID;
@@ -24,7 +26,10 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/organizer/payment-methods")
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentMethodController {
+
+    private final RestClient mpRestClient = RestClient.create();
 
     private final PaymentMethodRepository paymentMethodRepository;
     private final OrganizerProfileRepository organizerProfileRepository;
@@ -137,12 +142,33 @@ public class PaymentMethodController {
                 || req.mpAccessToken() == null || req.mpAccessToken().isBlank()) {
             return null;
         }
+        String token = req.mpAccessToken().strip();
+        java.util.Map<String, String> meta = new java.util.LinkedHashMap<>();
+        meta.put("accessToken", token);
+        String mpUserId = fetchMpUserId(token);
+        if (mpUserId != null) meta.put("mpUserId", mpUserId);
         try {
-            return objectMapper.writeValueAsString(
-                    java.util.Map.of("accessToken", req.mpAccessToken().strip()));
+            return objectMapper.writeValueAsString(meta);
         } catch (JsonProcessingException ex) {
             throw new BusinessException("Error al procesar credenciales de Mercado Pago");
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String fetchMpUserId(String accessToken) {
+        try {
+            java.util.Map<?, ?> response = mpRestClient.get()
+                    .uri("https://api.mercadopago.com/v1/users/me")
+                    .header("Authorization", "Bearer " + accessToken)
+                    .retrieve()
+                    .body(java.util.Map.class);
+            if (response != null && response.get("id") != null) {
+                return response.get("id").toString();
+            }
+        } catch (Exception ex) {
+            log.warn("No se pudo obtener MP user_id para el token: {}", ex.getMessage());
+        }
+        return null;
     }
 
     private OrganizerProfile currentOrganizer() {
