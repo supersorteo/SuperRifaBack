@@ -44,14 +44,39 @@ public class PaymentMethodController {
             String mpAccessToken
     ) {}
 
+    public record PaymentMethodDto(
+            UUID id,
+            PaymentMethodType type,
+            String displayName,
+            String alias,
+            String cbu,
+            String cvu,
+            String accountHolder,
+            String instructions,
+            boolean active,
+            boolean publicVisible,
+            int displayOrder,
+            boolean hasIntegrationToken
+    ) {
+        static PaymentMethodDto from(PaymentMethod pm) {
+            return new PaymentMethodDto(
+                    pm.getId(), pm.getType(), pm.getDisplayName(),
+                    pm.getAlias(), pm.getCbu(), pm.getCvu(),
+                    pm.getAccountHolder(), pm.getInstructions(),
+                    pm.isActive(), pm.isPublicVisible(), pm.getDisplayOrder(),
+                    pm.getIntegrationMetadata() != null && !pm.getIntegrationMetadata().isBlank());
+        }
+    }
+
     @GetMapping
-    public ResponseEntity<List<PaymentMethod>> list() {
+    public ResponseEntity<List<PaymentMethodDto>> list() {
         return ResponseEntity.ok(
-                paymentMethodRepository.findByOrganizerIdAndActiveTrueOrderByDisplayOrderAsc(currentOrganizer().getId()));
+                paymentMethodRepository.findByOrganizerIdAndActiveTrueOrderByDisplayOrderAsc(currentOrganizer().getId())
+                        .stream().map(PaymentMethodDto::from).toList());
     }
 
     @PostMapping
-    public ResponseEntity<PaymentMethod> create(@Valid @RequestBody PaymentMethodRequest req) {
+    public ResponseEntity<PaymentMethodDto> create(@Valid @RequestBody PaymentMethodRequest req) {
         OrganizerProfile org = currentOrganizer();
         PaymentMethod pm = PaymentMethod.builder()
                 .organizer(org)
@@ -67,12 +92,12 @@ public class PaymentMethodController {
                 .publicVisible(req.publicVisible())
                 .displayOrder(req.displayOrder() != null ? req.displayOrder() : 0)
                 .build();
-        return ResponseEntity.status(HttpStatus.CREATED).body(paymentMethodRepository.save(pm));
+        return ResponseEntity.status(HttpStatus.CREATED).body(PaymentMethodDto.from(paymentMethodRepository.save(pm)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<PaymentMethod> update(@PathVariable UUID id,
-                                                 @Valid @RequestBody PaymentMethodRequest req) {
+    public ResponseEntity<PaymentMethodDto> update(@PathVariable UUID id,
+                                                    @Valid @RequestBody PaymentMethodRequest req) {
         PaymentMethod pm = findOwned(id);
         pm.setType(req.type());
         pm.setDisplayName(req.displayName());
@@ -87,7 +112,7 @@ public class PaymentMethodController {
         if (req.type() != PaymentMethodType.MERCADO_PAGO) pm.setIntegrationMetadata(null);
         pm.setPublicVisible(req.publicVisible());
         if (req.displayOrder() != null) pm.setDisplayOrder(req.displayOrder());
-        return ResponseEntity.ok(paymentMethodRepository.save(pm));
+        return ResponseEntity.ok(PaymentMethodDto.from(paymentMethodRepository.save(pm)));
     }
 
     @DeleteMapping("/{id}")
