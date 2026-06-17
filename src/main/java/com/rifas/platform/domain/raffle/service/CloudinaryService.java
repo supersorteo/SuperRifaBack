@@ -58,6 +58,9 @@ public class CloudinaryService implements ImageStorageService {
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new IllegalArgumentException("La imagen no puede superar 2 MB");
         }
+        log.info("Cloudinary config — cloud_name={}, api_key={}",
+                props.getCloudName(),
+                props.getApiKey() != null ? props.getApiKey().substring(0, Math.min(4, props.getApiKey().length())) + "****" : "NULL");
         String publicId = props.getUploadFolder() + "/avatars/" + organizerId;
         Map<String, Object> result = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
                 "public_id",     publicId,
