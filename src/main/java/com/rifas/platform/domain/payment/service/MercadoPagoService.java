@@ -59,13 +59,14 @@ public class MercadoPagoService {
             String frontUrl = appProps.getFrontUrl();
             boolean isLocalhost = baseUrl.contains("localhost") || baseUrl.contains("127.0.0.1");
 
+            String slug = reservation.getRaffle().getSlug();
             var reqBuilder = PreferenceRequest.builder()
                     .items(items)
                     .externalReference(reservation.getId().toString())
                     .backUrls(PreferenceBackUrlsRequest.builder()
-                            .success(frontUrl + "/reserva/exitosa")
-                            .failure(frontUrl + "/reserva/fallida")
-                            .pending(frontUrl + "/reserva/pendiente")
+                            .success(frontUrl + "/rifa/" + slug + "?pago=exitoso")
+                            .failure(frontUrl + "/rifa/" + slug + "?pago=fallido")
+                            .pending(frontUrl + "/rifa/" + slug + "?pago=pendiente")
                             .build());
 
             if (!isLocalhost) {
