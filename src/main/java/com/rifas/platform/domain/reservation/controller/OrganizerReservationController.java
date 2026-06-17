@@ -39,4 +39,10 @@ public class OrganizerReservationController {
     public ResponseEntity<OrganizerReservationDto> cancel(@PathVariable UUID id) {
         return ResponseEntity.ok(reservationService.cancelReservation(id));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        reservationService.deleteReservation(id);
+        return ResponseEntity.noContent().build();
+    }
 }

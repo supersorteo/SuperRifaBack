@@ -107,6 +107,24 @@ public class OrganizerReservationService {
         eventPublisher.publishNumbersReserved(raffleId, nums);
     }
 
+    @Transactional
+    public void deleteReservation(UUID reservationId) {
+        Reservation reservation = findOwnedReservation(reservationId);
+        List<RaffleNumber> numbers = raffleNumberRepository.findByReservationId(reservationId);
+        if (!numbers.isEmpty()) {
+            numbers.forEach(n -> {
+                n.setStatus(NumberStatus.AVAILABLE);
+                n.setReservation(null);
+                n.setReservedAt(null);
+                n.setExpiresAt(null);
+                n.setPaidAt(null);
+            });
+            raffleNumberRepository.saveAll(numbers);
+            publishProgress(reservation, numbers);
+        }
+        reservationRepository.delete(reservation);
+    }
+
     private Reservation findOwnedReservation(UUID reservationId) {
         if (reservationId == null) throw new ResourceNotFoundException("Reserva no encontrada");
         Reservation reservation = reservationRepository.findById(reservationId)
