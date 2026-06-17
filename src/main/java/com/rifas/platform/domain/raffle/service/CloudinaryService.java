@@ -1,6 +1,7 @@
 package com.rifas.platform.domain.raffle.service;
 
 import com.cloudinary.Cloudinary;
+import com.cloudinary.Transformation;
 import com.cloudinary.utils.ObjectUtils;
 import com.rifas.platform.config.CloudinaryProperties;
 import lombok.RequiredArgsConstructor;
@@ -33,17 +34,13 @@ public class CloudinaryService implements ImageStorageService {
 
         String publicId = props.getUploadFolder() + "/raffles/" + raffleId + "/" + UUID.randomUUID();
 
+        Transformation t = new Transformation().width(1200).height(800).crop("limit").quality("auto:good");
         Map<String, Object> result = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
                 "public_id",     publicId,
                 "overwrite",     true,
                 "resource_type", "image",
                 "format",        "webp",
-                "transformation", ObjectUtils.asMap(
-                        "width",   1200,
-                        "height",  800,
-                        "crop",    "limit",
-                        "quality", "auto:good"
-                )
+                "transformation", t
         ));
 
         return new UploadResult(
@@ -58,22 +55,14 @@ public class CloudinaryService implements ImageStorageService {
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new IllegalArgumentException("La imagen no puede superar 2 MB");
         }
-        log.info("Cloudinary config — cloud_name={}, api_key={}",
-                props.getCloudName(),
-                props.getApiKey() != null ? props.getApiKey().substring(0, Math.min(4, props.getApiKey().length())) + "****" : "NULL");
         String publicId = props.getUploadFolder() + "/avatars/" + organizerId;
+        Transformation ta = new Transformation().width(400).height(400).crop("fill").gravity("face").quality("auto:good");
         Map<String, Object> result = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
                 "public_id",     publicId,
                 "overwrite",     true,
                 "resource_type", "image",
                 "format",        "webp",
-                "transformation", ObjectUtils.asMap(
-                        "width",   400,
-                        "height",  400,
-                        "crop",    "fill",
-                        "gravity", "face",
-                        "quality", "auto:good"
-                )
+                "transformation", ta
         ));
         return new UploadResult(publicId, (String) result.get("secure_url"));
     }
