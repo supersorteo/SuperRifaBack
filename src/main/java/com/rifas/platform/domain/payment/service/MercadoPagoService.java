@@ -42,13 +42,13 @@ public class MercadoPagoService {
 
     public PreferenceResult createPreference(Reservation reservation) {
         String accessToken = resolveToken(reservation.getRaffle().getOrganizer());
+        log.debug("Creating MP preference with token: {}...", accessToken.substring(0, Math.min(12, accessToken.length())));
         MPRequestOptions opts = MPRequestOptions.builder().accessToken(accessToken).build();
 
         try {
             List<PreferenceItemRequest> items = List.of(
                     PreferenceItemRequest.builder()
-                            .title("Números de rifa: " + reservation.getRaffle().getTitle())
-                            .description("Reserva #" + reservation.getId().toString().substring(0, 8))
+                            .title("Rifas: " + reservation.getRaffle().getTitle())
                             .quantity(1)
                             .unitPrice(reservation.getTotalAmount())
                             .currencyId("ARS")
@@ -56,18 +56,25 @@ public class MercadoPagoService {
             );
 
             String baseUrl = appProps.getBaseUrl();
-            PreferenceRequest req = PreferenceRequest.builder()
+            String frontUrl = appProps.getFrontUrl();
+            boolean isLocalhost = baseUrl.contains("localhost") || baseUrl.contains("127.0.0.1");
+
+            var reqBuilder = PreferenceRequest.builder()
                     .items(items)
                     .externalReference(reservation.getId().toString())
                     .backUrls(PreferenceBackUrlsRequest.builder()
-                            .success(baseUrl.replace(":8080", ":4200") + "/reserva/exitosa")
-                            .failure(baseUrl.replace(":8080", ":4200") + "/reserva/fallida")
-                            .pending(baseUrl.replace(":8080", ":4200") + "/reserva/pendiente")
-                            .build())
+                            .success(frontUrl + "/reserva/exitosa")
+                            .failure(frontUrl + "/reserva/fallida")
+                            .pending(frontUrl + "/reserva/pendiente")
+                            .build());
+
+            if (!isLocalhost) {
+                reqBuilder
                     .autoReturn("approved")
-                    .notificationUrl(baseUrl.replace(":4200", ":8080")
-                            + "/api/payments/webhook/mercadopago")
-                    .build();
+                    .notificationUrl(baseUrl + "/api/payments/webhook/mercadopago");
+            }
+
+            PreferenceRequest req = reqBuilder.build();
 
             PreferenceClient client = new PreferenceClient();
             Preference preference = client.create(req, opts);
@@ -77,9 +84,13 @@ public class MercadoPagoService {
 
             return new PreferenceResult(preference.getId(), url);
 
-        } catch (MPApiException | MPException ex) {
+        } catch (MPApiException ex) {
+            String detail = ex.getApiResponse() != null ? ex.getApiResponse().getContent() : ex.getMessage();
+            log.error("MP preference creation failed [{}]: {}", ex.getStatusCode(), detail);
+            throw new BusinessException("Error al crear preferencia de pago con Mercado Pago. Verificá las credenciales del organizador.");
+        } catch (MPException ex) {
             log.error("MP preference creation failed: {}", ex.getMessage());
-            throw new BusinessException("Error al crear preferencia de pago: " + ex.getMessage());
+            throw new BusinessException("Error de conexión con Mercado Pago. Intentá de nuevo.");
         }
     }
 
@@ -104,29 +115,27 @@ public class MercadoPagoService {
         }
     }
 
-    /**
-     * Resuelve el access_token a usar para el organizer:
-     * - Si el organizer configuró un método MERCADO_PAGO con token en integrationMetadata → usa ese
-     * - Sino → fallback al token sandbox de la plataforma (para pruebas)
-     */
     private String resolveToken(OrganizerProfile organizer) {
-        return paymentMethodRepo
+        var pm = paymentMethodRepo
                 .findFirstByOrganizerIdAndTypeAndActiveTrue(organizer.getId(), PaymentMethodType.MERCADO_PAGO)
-                .map(pm -> {
-                    try {
-                        var meta = objectMapper.readValue(pm.getIntegrationMetadata(),
-                                new TypeReference<java.util.Map<String, String>>() {});
-                        String token = meta.get("accessToken");
-                        if (token != null && !token.isBlank()) return token;
-                    } catch (Exception ex) {
-                        log.warn("Could not parse integrationMetadata for PaymentMethod {}: {}", pm.getId(), ex.getMessage());
-                    }
-                    return mpProps.getAccessToken();
-                })
-                .orElseGet(() -> {
-                    log.debug("Organizer {} has no active MERCADO_PAGO method — using platform sandbox token", organizer.getId());
-                    return mpProps.getAccessToken();
-                });
+                .orElseThrow(() -> new BusinessException(
+                        "El organizador no tiene Mercado Pago configurado como método de pago"));
+
+        String meta = pm.getIntegrationMetadata();
+        if (meta == null || meta.isBlank()) {
+            throw new BusinessException(
+                    "El organizador no completó la configuración de Mercado Pago. Contactá al organizador.");
+        }
+
+        try {
+            var metaMap = objectMapper.readValue(meta, new TypeReference<java.util.Map<String, String>>() {});
+            String token = metaMap.get("accessToken");
+            if (token != null && !token.isBlank()) return token;
+        } catch (Exception ex) {
+            log.warn("Could not parse integrationMetadata for PaymentMethod {}: {}", pm.getId(), ex.getMessage());
+        }
+        throw new BusinessException(
+                "Error al leer las credenciales de Mercado Pago. Contactá al organizador.");
     }
 
     private void validateWebhookSignature(String dataId, String xSignature, String xRequestId) {

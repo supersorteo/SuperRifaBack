@@ -103,6 +103,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- ═══ CONFIG METADATA ═══ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- ═══ MAPSTRUCT ═══ -->
         <dependency>
             <groupId>org.mapstruct</groupId>

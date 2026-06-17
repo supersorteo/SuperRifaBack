@@ -38,7 +38,7 @@ public class ReservationController {
 
     @PostMapping("/{id}/preference")
     public ResponseEntity<PreferenceResponse> createPreference(@PathVariable UUID id) {
-        Reservation reservation = reservationRepository.findById(id)
+        Reservation reservation = reservationRepository.findByIdWithRaffleAndOrganizer(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Reserva no encontrada"));
         MercadoPagoService.PreferenceResult result = mercadoPagoService.createPreference(reservation);
         return ResponseEntity.ok(new PreferenceResponse(result.preferenceId(), result.checkoutUrl()));

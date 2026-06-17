@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.*;
 import java.util.List;
 import java.util.UUID;
 
@@ -70,6 +71,14 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
         WHERE r.status = 'PENDING' AND r.expiresAt < :now
         """)
     List<Reservation> findExpiredPending(@Param("now") LocalDateTime now);
+
+    @Query("""
+        SELECT r FROM Reservation r
+        JOIN FETCH r.raffle rf
+        JOIN FETCH rf.organizer
+        WHERE r.id = :id
+        """)
+    Optional<Reservation> findByIdWithRaffleAndOrganizer(@Param("id") UUID id);
 
     @Modifying
     @Query("""

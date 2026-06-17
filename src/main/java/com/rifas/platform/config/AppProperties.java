@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
 @Getter @Setter
 public class AppProperties {
 
-    private String baseUrl = "http://localhost:4200";
+    private String baseUrl = "http://localhost:8080";
+    private String frontUrl = "http://localhost:4200";
     private Cors cors = new Cors();
 
     @Getter @Setter
