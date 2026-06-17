@@ -1,5 +1,7 @@
 package com.rifas.platform.domain.payment.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rifas.platform.domain.organizer.entity.OrganizerProfile;
 import com.rifas.platform.domain.organizer.repository.OrganizerProfileRepository;
 import com.rifas.platform.domain.payment.entity.PaymentMethod;
@@ -26,6 +28,7 @@ public class PaymentMethodController {
 
     private final PaymentMethodRepository paymentMethodRepository;
     private final OrganizerProfileRepository organizerProfileRepository;
+    private final ObjectMapper objectMapper;
 
     public record PaymentMethodRequest(
             @NotNull PaymentMethodType type,
@@ -36,7 +39,9 @@ public class PaymentMethodController {
             String accountHolder,
             @Size(max = 500) String instructions,
             boolean publicVisible,
-            Integer displayOrder
+            Integer displayOrder,
+            /** Solo para type=MERCADO_PAGO: access_token personal del organizer */
+            String mpAccessToken
     ) {}
 
     @GetMapping
@@ -57,6 +62,7 @@ public class PaymentMethodController {
                 .cvu(req.cvu())
                 .accountHolder(req.accountHolder())
                 .instructions(req.instructions())
+                .integrationMetadata(buildMetadata(req))
                 .active(true)
                 .publicVisible(req.publicVisible())
                 .displayOrder(req.displayOrder() != null ? req.displayOrder() : 0)
@@ -75,6 +81,10 @@ public class PaymentMethodController {
         pm.setCvu(req.cvu());
         pm.setAccountHolder(req.accountHolder());
         pm.setInstructions(req.instructions());
+        // Solo actualiza el token si se envió uno nuevo; si no, conserva el existente
+        String newMeta = buildMetadata(req);
+        if (newMeta != null) pm.setIntegrationMetadata(newMeta);
+        if (req.type() != PaymentMethodType.MERCADO_PAGO) pm.setIntegrationMetadata(null);
         pm.setPublicVisible(req.publicVisible());
         if (req.displayOrder() != null) pm.setDisplayOrder(req.displayOrder());
         return ResponseEntity.ok(paymentMethodRepository.save(pm));
@@ -95,6 +105,19 @@ public class PaymentMethodController {
             throw new BusinessException("Sin permisos sobre este método de pago");
         }
         return pm;
+    }
+
+    private String buildMetadata(PaymentMethodRequest req) {
+        if (req.type() != PaymentMethodType.MERCADO_PAGO
+                || req.mpAccessToken() == null || req.mpAccessToken().isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(
+                    java.util.Map.of("accessToken", req.mpAccessToken().strip()));
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException("Error al procesar credenciales de Mercado Pago");
+        }
     }
 
     private OrganizerProfile currentOrganizer() {

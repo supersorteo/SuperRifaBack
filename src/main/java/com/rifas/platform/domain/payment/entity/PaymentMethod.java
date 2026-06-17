@@ -50,5 +50,6 @@ public class PaymentMethod {
     @Builder.Default private Integer displayOrder  = 0;
 
     @Column(columnDefinition = "TEXT")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String integrationMetadata;
 }

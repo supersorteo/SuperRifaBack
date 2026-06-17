@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "mercadopago")
 @Getter @Setter
 public class MercadoPagoProperties {
+    /** Token sandbox de la plataforma — fallback cuando el organizer no configuró su método MP */
     private String accessToken;
     private String webhookSecret;
     private boolean sandbox = true;

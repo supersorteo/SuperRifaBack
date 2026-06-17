@@ -7,6 +7,7 @@ import com.rifas.platform.domain.reservation.dto.ParticipantLookupDto;
 import com.rifas.platform.domain.reservation.dto.ReservationCreatedDto;
 import com.rifas.platform.domain.reservation.entity.Reservation;
 import com.rifas.platform.domain.reservation.repository.ReservationRepository;
+import com.rifas.platform.domain.payment.service.MercadoPagoService;
 import com.rifas.platform.domain.reservation.service.ReservationService;
 import com.rifas.platform.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Valid;
@@ -16,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/public/reservations")
@@ -25,10 +27,21 @@ public class ReservationController {
     private final ReservationService reservationService;
     private final ReservationRepository reservationRepository;
     private final RaffleNumberRepository raffleNumberRepository;
+    private final MercadoPagoService mercadoPagoService;
+
+    public record PreferenceResponse(String preferenceId, String checkoutUrl) {}
 
     @PostMapping
     public ResponseEntity<ReservationCreatedDto> create(@Valid @RequestBody CreateReservationRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.createReservation(req));
+    }
+
+    @PostMapping("/{id}/preference")
+    public ResponseEntity<PreferenceResponse> createPreference(@PathVariable UUID id) {
+        Reservation reservation = reservationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Reserva no encontrada"));
+        MercadoPagoService.PreferenceResult result = mercadoPagoService.createPreference(reservation);
+        return ResponseEntity.ok(new PreferenceResponse(result.preferenceId(), result.checkoutUrl()));
     }
 
     @GetMapping("/lookup")
