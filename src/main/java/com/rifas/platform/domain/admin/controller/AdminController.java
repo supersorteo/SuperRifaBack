@@ -3,6 +3,10 @@ package com.rifas.platform.domain.admin.controller;
 import com.rifas.platform.domain.admin.dto.AdminOrganizerDetailDto;
 import com.rifas.platform.domain.admin.dto.AdminOrganizerDto;
 import com.rifas.platform.domain.admin.service.AdminOrganizerService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +20,28 @@ import java.util.UUID;
 public class AdminController {
 
     private final AdminOrganizerService adminOrganizerService;
+
+    public record ResetPasswordRequest(
+            @NotBlank @Size(min = 6, message = "La contraseña debe tener al menos 6 caracteres") String newPassword
+    ) {}
+
+    public record ResetPasswordByEmailRequest(
+            @NotBlank @Email String email,
+            @NotBlank @Size(min = 6, message = "La contraseña debe tener al menos 6 caracteres") String newPassword
+    ) {}
+
+    @PatchMapping("/organizers/{id}/reset-password")
+    public ResponseEntity<Void> resetPasswordById(@PathVariable UUID id,
+                                                   @Valid @RequestBody ResetPasswordRequest req) {
+        adminOrganizerService.resetPasswordById(id, req.newPassword());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/users/reset-password")
+    public ResponseEntity<Void> resetPasswordByEmail(@Valid @RequestBody ResetPasswordByEmailRequest req) {
+        adminOrganizerService.resetPasswordByEmail(req.email(), req.newPassword());
+        return ResponseEntity.noContent().build();
+    }
 
     @GetMapping("/organizers")
     public ResponseEntity<List<AdminOrganizerDto>> getOrganizers() {

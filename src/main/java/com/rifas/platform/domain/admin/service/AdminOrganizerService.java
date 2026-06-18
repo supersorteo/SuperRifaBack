@@ -16,9 +16,11 @@ import com.rifas.platform.domain.raffle.repository.RaffleRepository;
 import com.rifas.platform.domain.raffle.service.ImageStorageService;
 import com.rifas.platform.domain.reservation.entity.Reservation;
 import com.rifas.platform.domain.reservation.repository.ReservationRepository;
+import com.rifas.platform.domain.user.entity.User;
 import com.rifas.platform.domain.user.repository.UserRepository;
 import com.rifas.platform.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,24 @@ public class AdminOrganizerService {
     private final PaymentMethodRepository    paymentMethodRepository;
     private final SubscriptionRepository     subscriptionRepository;
     private final ImageStorageService        imageStorageService;
+    private final PasswordEncoder            passwordEncoder;
+
+    @Transactional
+    public void resetPasswordById(UUID organizerId, String newPassword) {
+        OrganizerProfile profile = organizerProfileRepository.findById(organizerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organizador no encontrado"));
+        User user = profile.getUser();
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void resetPasswordByEmail(String email, String newPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("No existe usuario con email: " + email));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
 
     @Transactional(readOnly = true)
     public List<AdminOrganizerDto> getAllOrganizers() {
