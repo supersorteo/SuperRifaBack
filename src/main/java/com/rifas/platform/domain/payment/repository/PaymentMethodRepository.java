@@ -25,4 +25,7 @@ public interface PaymentMethodRepository extends JpaRepository<PaymentMethod, UU
         LIMIT 1
         """, nativeQuery = true)
     Optional<PaymentMethod> findFirstActiveMpByMpUserId(@Param("mpUserId") String mpUserId);
+
+    @Query("SELECT pm FROM PaymentMethod pm WHERE pm.type = 'MERCADO_PAGO' AND pm.active = true")
+    List<PaymentMethod> findAllActiveMercadoPago();
 }

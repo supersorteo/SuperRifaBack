@@ -12,6 +12,7 @@ import com.mercadopago.resources.preference.Preference;
 import com.rifas.platform.config.AppProperties;
 import com.rifas.platform.config.MercadoPagoProperties;
 import com.rifas.platform.domain.organizer.entity.OrganizerProfile;
+import com.rifas.platform.domain.payment.entity.PaymentMethod;
 import com.rifas.platform.domain.payment.repository.PaymentMethodRepository;
 import com.rifas.platform.domain.reservation.entity.Reservation;
 import com.rifas.platform.shared.enums.PaymentMethodType;
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -111,19 +113,27 @@ public class MercadoPagoService {
             log.info("[WEBHOOK] Sin secret configurado — omitiendo validación de firma para mpPaymentId={}", dataId);
         }
 
-        // Intento 1: token del organizador via mpUserId almacenado
+        // Intento 1: token del organizador via mpUserId almacenado en integrationMetadata
         String accessToken = resolveWebhookToken(mpUserId);
 
-        // Intento 2: fallback con token de plataforma si el organizador no re-guardó credenciales
+        // Intento 2: platform token configurado en Railway (MP_ACCESS_TOKEN)
         if (accessToken == null) {
             String platformToken = mpProps.getAccessToken();
             if (platformToken != null && !platformToken.isBlank()) {
-                log.warn("[WEBHOOK] mpUserId={} sin token en BD — usando token de plataforma como fallback para mpPaymentId={}", mpUserId, dataId);
+                log.warn("[WEBHOOK] mpUserId={} sin token en BD — usando platform token como fallback", mpUserId);
                 accessToken = platformToken;
-            } else {
-                log.error("[WEBHOOK] Sin token resolvible para mpUserId={}, mpPaymentId={}. El organizador debe re-guardar sus credenciales MP.", mpUserId, dataId);
-                return;
             }
+        }
+
+        // Intento 3: brute-force — probar todos los access tokens MP activos hasta encontrar
+        // el que puede consultar este pago. Cuando funciona, guarda mpUserId para la próxima vez.
+        if (accessToken == null) {
+            accessToken = resolveTokenByBruteForce(dataId, mpUserId);
+        }
+
+        if (accessToken == null) {
+            log.error("[WEBHOOK] Sin token resolvible para mpUserId={}, mpPaymentId={}. Guardá las credenciales MP en el perfil del organizador.", mpUserId, dataId);
+            return;
         }
 
         MPRequestOptions opts = MPRequestOptions.builder().accessToken(accessToken).build();
@@ -153,6 +163,46 @@ public class MercadoPagoService {
         } catch (Exception ex) {
             log.warn("Could not parse integrationMetadata for mp_user_id {}: {}", mpUserId, ex.getMessage());
             return null;
+        }
+    }
+
+    private String resolveTokenByBruteForce(String dataId, String mpUserId) {
+        List<PaymentMethod> methods = paymentMethodRepo.findAllActiveMercadoPago();
+        log.info("[WEBHOOK] Brute-force: probando {} tokens MP activos para mpPaymentId={}", methods.size(), dataId);
+        for (PaymentMethod pm : methods) {
+            if (pm.getIntegrationMetadata() == null) continue;
+            try {
+                Map<String, String> meta = objectMapper.readValue(pm.getIntegrationMetadata(),
+                        new TypeReference<>() {});
+                String token = meta.get("accessToken");
+                if (token == null || token.isBlank()) continue;
+                MPRequestOptions testOpts = MPRequestOptions.builder().accessToken(token).build();
+                Payment testPayment = new PaymentClient().get(Long.parseLong(dataId), testOpts);
+                if (testPayment != null && testPayment.getId() != null) {
+                    log.info("[WEBHOOK] Token encontrado via brute-force para mpPaymentId={} (PM: {})", dataId, pm.getId());
+                    autoSaveMpUserId(pm, meta, mpUserId);
+                    return token;
+                }
+            } catch (MPApiException ex) {
+                if (ex.getStatusCode() == 401 || ex.getStatusCode() == 403) continue;
+                log.warn("[WEBHOOK] Error MP brute-force PM {}: [{}] {}", pm.getId(), ex.getStatusCode(), ex.getMessage());
+            } catch (Exception ex) {
+                log.warn("[WEBHOOK] Error brute-force PM {}: {}", pm.getId(), ex.getMessage());
+            }
+        }
+        log.error("[WEBHOOK] Brute-force fallido — ningún token pudo consultar mpPaymentId={}", dataId);
+        return null;
+    }
+
+    private void autoSaveMpUserId(PaymentMethod pm, Map<String, String> meta, String mpUserId) {
+        if (mpUserId == null || meta.containsKey("mpUserId")) return;
+        try {
+            meta.put("mpUserId", mpUserId);
+            pm.setIntegrationMetadata(objectMapper.writeValueAsString(meta));
+            paymentMethodRepo.save(pm);
+            log.info("[WEBHOOK] Auto-guardado mpUserId={} en PaymentMethod {} para webhooks futuros", mpUserId, pm.getId());
+        } catch (Exception ex) {
+            log.warn("[WEBHOOK] No se pudo auto-guardar mpUserId: {}", ex.getMessage());
         }
     }
 
