@@ -73,4 +73,15 @@ public class RaffleEventPublisher {
                         "numbers", numbers, "amount", amount, "ts", Instant.now())
         );
     }
+
+    public void publishReservationConfirmed(UUID raffleId, String raffleTitle,
+                                             String participantName, List<Integer> numbers,
+                                             BigDecimal amount) {
+        messaging.convertAndSend(
+                "/topic/raffle/" + raffleId + "/reservation-confirmed",
+                Map.of("raffleId", raffleId, "raffleTitle", raffleTitle,
+                        "participantName", participantName,
+                        "numbers", numbers, "amount", amount, "ts", Instant.now())
+        );
+    }
 }

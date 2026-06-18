@@ -80,6 +80,14 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
         """)
     Optional<Reservation> findByIdWithRaffleAndOrganizer(@Param("id") UUID id);
 
+    @Query("""
+        SELECT r FROM Reservation r
+        JOIN FETCH r.raffle rf
+        JOIN FETCH r.participant p
+        WHERE r.id = :id
+        """)
+    Optional<Reservation> findByIdWithRaffleAndParticipant(@Param("id") UUID id);
+
     @Modifying
     @Query("""
         UPDATE Reservation r SET r.status = 'EXPIRED'

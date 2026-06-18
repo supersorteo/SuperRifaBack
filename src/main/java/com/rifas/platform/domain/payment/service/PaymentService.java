@@ -21,6 +21,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -117,7 +118,7 @@ public class PaymentService {
 
         if (newStatus != PaymentStatus.APPROVED) return;
 
-        reservationRepository.findById(reservationId).ifPresentOrElse(reservation -> {
+        reservationRepository.findByIdWithRaffleAndParticipant(reservationId).ifPresentOrElse(reservation -> {
             if (reservation.getStatus() == ReservationStatus.CONFIRMED) {
                 log.info("Reserva {} ya confirmada, webhook ignorado (mpPaymentId={})", reservationId, externalPaymentId);
                 return;
@@ -142,10 +143,16 @@ public class PaymentService {
         raffleNumberRepository.saveAll(numbers);
 
         UUID raffleId = reservation.getRaffle().getId();
+        String raffleTitle = reservation.getRaffle().getTitle();
+        String participantName = reservation.getParticipant().getFullName();
+        List<Integer> nums = numbers.stream().map(RaffleNumber::getNumber).toList();
+        BigDecimal amount = reservation.getTotalAmount();
+
         long available = raffleNumberRepository.countByRaffleAndStatus(reservation.getRaffle(), NumberStatus.AVAILABLE);
         long reserved  = raffleNumberRepository.countByRaffleAndStatus(reservation.getRaffle(), NumberStatus.RESERVED);
         long paid      = raffleNumberRepository.countByRaffleAndStatus(reservation.getRaffle(), NumberStatus.PAID);
         eventPublisher.publishNumbersUpdated(raffleId, (int) available, (int) reserved, (int) paid);
+        eventPublisher.publishReservationConfirmed(raffleId, raffleTitle, participantName, nums, amount);
     }
 
     private Payment findPayment(UUID id) {
