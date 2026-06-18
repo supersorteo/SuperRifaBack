@@ -140,12 +140,12 @@ public class RaffleExecutionService {
 
     private List<Integer> buildEligibleNumbers(Raffle raffle) {
         List<Integer> eligible = raffleNumberRepository.findByRaffleOrderByNumberAsc(raffle).stream()
-                .filter(n -> n.getStatus() == NumberStatus.RESERVED)
+                .filter(n -> n.getStatus() == NumberStatus.PAID)
                 .map(RaffleNumber::getNumber)
                 .toList();
 
         if (eligible.isEmpty()) {
-            throw new BusinessException("La rifa debe tener al menos un numero reservado antes de ejecutar el sorteo");
+            throw new BusinessException("La rifa no tiene numeros pagados para ejecutar el sorteo");
         }
         return eligible;
     }
