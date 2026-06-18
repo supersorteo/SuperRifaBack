@@ -17,9 +17,12 @@ import com.rifas.platform.shared.exception.ResourceNotFoundException;
 import com.rifas.platform.shared.security.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,7 +40,9 @@ public class RaffleExecutionService {
     private final RaffleExecutionRepository executionRepository;
     private final RaffleEventPublisher eventPublisher;
     private final AuditService auditService;
-    private final RaffleExecutionAsyncRunner asyncRunner;
+    @Qualifier("raffleDrawExecutor")
+    private final TaskExecutor raffleDrawExecutor;
+    private final TransactionTemplate transactionTemplate;
 
     private final ManualDrawStrategy manualStrategy;
     private final AutomaticDrawStrategy automaticStrategy;
@@ -76,11 +81,13 @@ public class RaffleExecutionService {
         raffle.setOperationalStatus(OperationalStatus.EXECUTING);
         raffleRepository.saveAndFlush(raffle);
         eventPublisher.publishDrawStarted(raffle.getId());
-        asyncRunner.run(raffleId, method, executedBy);
+        raffleDrawExecutor.execute(() ->
+                transactionTemplate.executeWithoutResult(status ->
+                        completeQueuedDraw(raffleId, method, executedBy))
+        );
     }
 
-    @Transactional
-    public void completeQueuedDraw(UUID raffleId, DrawMethod method, UUID executedBy) {
+    private void completeQueuedDraw(UUID raffleId, DrawMethod method, UUID executedBy) {
         Raffle raffle = raffleRepository.findById(raffleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
 
