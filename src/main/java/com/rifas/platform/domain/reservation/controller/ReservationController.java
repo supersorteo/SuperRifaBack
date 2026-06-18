@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -42,6 +43,16 @@ public class ReservationController {
                 .orElseThrow(() -> new ResourceNotFoundException("Reserva no encontrada"));
         MercadoPagoService.PreferenceResult result = mercadoPagoService.createPreference(reservation);
         return ResponseEntity.ok(new PreferenceResponse(result.preferenceId(), result.checkoutUrl()));
+    }
+
+    @GetMapping("/{id}/status")
+    public ResponseEntity<Map<String, String>> getStatus(@PathVariable UUID id) {
+        Reservation reservation = reservationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Reserva no encontrada"));
+        return ResponseEntity.ok(Map.of(
+                "id", id.toString(),
+                "status", reservation.getStatus().name()
+        ));
     }
 
     @GetMapping("/lookup")

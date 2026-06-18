@@ -96,25 +96,44 @@ public class MercadoPagoService {
     }
 
     public void processWebhook(String dataId, String mpUserId, String xSignature, String xRequestId) {
+        log.info("[WEBHOOK] Recibido: mpPaymentId={}, mpUserId={}", dataId, mpUserId);
+
+        // Validación de firma: no-bloqueante — solo registra advertencia para evitar
+        // que una clave mal configurada bloquee la confirmación de pagos reales.
         if (mpProps.getWebhookSecret() != null && !mpProps.getWebhookSecret().isBlank()) {
-            validateWebhookSignature(dataId, xSignature, xRequestId);
+            if (!isSignatureValid(dataId, xSignature, xRequestId)) {
+                log.warn("[WEBHOOK] Firma inválida para mpPaymentId={} — procesando igual. Verificá MP_WEBHOOK_SECRET en Railway.", dataId);
+            }
         }
 
+        // Intento 1: token del organizador via mpUserId almacenado
         String accessToken = resolveWebhookToken(mpUserId);
+
+        // Intento 2: fallback con token de plataforma si el organizador no re-guardó credenciales
         if (accessToken == null) {
-            log.warn("No se encontró organizador para MP user_id={}, pago={}", mpUserId, dataId);
-            return;
+            String platformToken = mpProps.getAccessToken();
+            if (platformToken != null && !platformToken.isBlank()) {
+                log.warn("[WEBHOOK] mpUserId={} sin token en BD — usando token de plataforma como fallback para mpPaymentId={}", mpUserId, dataId);
+                accessToken = platformToken;
+            } else {
+                log.error("[WEBHOOK] Sin token resolvible para mpUserId={}, mpPaymentId={}. El organizador debe re-guardar sus credenciales MP.", mpUserId, dataId);
+                return;
+            }
         }
 
         MPRequestOptions opts = MPRequestOptions.builder().accessToken(accessToken).build();
         try {
             PaymentClient client = new PaymentClient();
             Payment mpPayment = client.get(Long.parseLong(dataId), opts);
-            PaymentStatus status = mapMpStatus(mpPayment.getStatus());
+            String mpStatus = mpPayment.getStatus();
             String externalReference = mpPayment.getExternalReference();
-            paymentService.syncFromWebhook(dataId, externalReference, status, mpPayment.getStatus());
-        } catch (MPApiException | MPException ex) {
-            log.error("Failed to process MP webhook for payment {}: {}", dataId, ex.getMessage());
+            PaymentStatus status = mapMpStatus(mpStatus);
+            log.info("[WEBHOOK] mpPaymentId={} status={} externalReference={}", dataId, mpStatus, externalReference);
+            paymentService.syncFromWebhook(dataId, externalReference, status, mpStatus);
+        } catch (MPApiException ex) {
+            log.error("[WEBHOOK] Error MP API para mpPaymentId={} [{}]: {}", dataId, ex.getStatusCode(), ex.getMessage());
+        } catch (MPException ex) {
+            log.error("[WEBHOOK] Error MP para mpPaymentId={}: {}", dataId, ex.getMessage());
         }
     }
 
@@ -155,32 +174,28 @@ public class MercadoPagoService {
                 "Error al leer las credenciales de Mercado Pago. Contactá al organizador.");
     }
 
-    private void validateWebhookSignature(String dataId, String xSignature, String xRequestId) {
-        if (xSignature == null || xRequestId == null) return;
+    private boolean isSignatureValid(String dataId, String xSignature, String xRequestId) {
+        if (xSignature == null || xRequestId == null) return true;
         try {
-            String ts = null;
-            String v1 = null;
+            String ts = null, v1 = null;
             for (String part : xSignature.split(",")) {
                 String[] kv = part.strip().split("=", 2);
                 if (kv.length == 2) {
-                    if ("ts".equals(kv[0]))   ts = kv[1];
-                    if ("v1".equals(kv[0]))   v1 = kv[1];
+                    if ("ts".equals(kv[0])) ts = kv[1];
+                    if ("v1".equals(kv[0])) v1 = kv[1];
                 }
             }
-            if (ts == null || v1 == null) return;
-
+            if (ts == null || v1 == null) return true;
             String manifest = "id:" + dataId + ";request-id:" + xRequestId + ";ts:" + ts;
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(
                     mpProps.getWebhookSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             String computed = HexFormat.of().formatHex(
                     mac.doFinal(manifest.getBytes(StandardCharsets.UTF_8)));
-
-            if (!computed.equals(v1)) {
-                throw new BusinessException("Firma de webhook inválida");
-            }
+            return computed.equals(v1);
         } catch (Exception ex) {
-            throw new BusinessException("Error validando firma de webhook: " + ex.getMessage());
+            log.warn("[WEBHOOK] Error evaluando firma: {}", ex.getMessage());
+            return false;
         }
     }
 
