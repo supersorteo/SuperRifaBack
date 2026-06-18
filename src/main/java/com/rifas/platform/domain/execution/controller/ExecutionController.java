@@ -20,6 +20,6 @@ public class ExecutionController {
     @PreAuthorize("hasAnyRole('ORGANIZER','ADMIN')")
     public ResponseEntity<Void> executeManual(@PathVariable UUID raffleId) {
         executionService.executeManualDraw(raffleId);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+        return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 }

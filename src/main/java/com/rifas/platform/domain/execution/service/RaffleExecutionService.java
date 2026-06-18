@@ -37,24 +37,25 @@ public class RaffleExecutionService {
     private final RaffleExecutionRepository executionRepository;
     private final RaffleEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final RaffleExecutionAsyncRunner asyncRunner;
 
     private final ManualDrawStrategy manualStrategy;
     private final AutomaticDrawStrategy automaticStrategy;
     private final ExternalDrawStrategy externalStrategy;
 
     @Transactional
-    public RaffleExecution executeManualDraw(UUID raffleId) {
+    public void executeManualDraw(UUID raffleId) {
         UserDetailsImpl ud = (UserDetailsImpl) SecurityContextHolder
                 .getContext().getAuthentication().getPrincipal();
-        return performDraw(raffleId, DrawMethod.MANUAL, ud.getId());
+        queueDrawExecution(raffleId, DrawMethod.MANUAL, ud.getId());
     }
 
     @Transactional
-    public RaffleExecution executeAutomaticDraw(UUID raffleId) {
-        return performDraw(raffleId, DrawMethod.AUTOMATIC, null);
+    public void executeAutomaticDraw(UUID raffleId) {
+        queueDrawExecution(raffleId, DrawMethod.AUTOMATIC, null);
     }
 
-    private RaffleExecution performDraw(UUID raffleId, DrawMethod method, UUID executedBy) {
+    private void queueDrawExecution(UUID raffleId, DrawMethod method, UUID executedBy) {
         Raffle raffle = raffleRepository.findById(raffleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
 
@@ -70,11 +71,24 @@ public class RaffleExecutionService {
             throw new BusinessException("La rifa ya tiene un sorteo registrado");
         }
 
-        List<Integer> eligible = buildEligibleNumbers(raffle);
+        buildEligibleNumbers(raffle);
 
         raffle.setOperationalStatus(OperationalStatus.EXECUTING);
         raffleRepository.saveAndFlush(raffle);
         eventPublisher.publishDrawStarted(raffle.getId());
+        asyncRunner.run(raffleId, method, executedBy);
+    }
+
+    @Transactional
+    public void completeQueuedDraw(UUID raffleId, DrawMethod method, UUID executedBy) {
+        Raffle raffle = raffleRepository.findById(raffleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
+
+        if (raffle.getOperationalStatus() != OperationalStatus.EXECUTING) {
+            return;
+        }
+
+        List<Integer> eligible = buildEligibleNumbers(raffle);
 
         DrawStrategy strategy = resolveStrategy(method);
         DrawResult result;
@@ -122,8 +136,6 @@ public class RaffleExecutionService {
         );
         auditService.log("DRAW_COMPLETED", "Raffle", raffleId, null,
                 "winner=" + result.drawnNumber() + " method=" + method);
-
-        return execution;
     }
 
     private void publishLiveCountdown(UUID raffleId) {
