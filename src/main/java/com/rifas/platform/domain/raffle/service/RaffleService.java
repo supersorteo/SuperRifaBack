@@ -304,6 +304,7 @@ public class RaffleService {
     private OrganizerRaffleResponse toOrganizerResponse(Raffle raffle) {
         long participantCount = reservationRepository.countDistinctParticipantsByRaffleId(raffle.getId());
         long reservedCount = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.RESERVED);
+        long paidCount = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.PAID);
         Reservation winnerReservation = raffle.getWinnerReservationId() != null
                 ? reservationRepository.findById(raffle.getWinnerReservationId()).orElse(null)
                 : null;
@@ -322,6 +323,7 @@ public class RaffleService {
                 raffle.getPrize() != null ? raffle.getPrize().getName() : null,
                 participantCount,
                 reservedCount,
+                paidCount,
                 raffle.getPublicationStatus(),
                 raffle.getOperationalStatus(),
                 raffle.getWinnerNumber(),

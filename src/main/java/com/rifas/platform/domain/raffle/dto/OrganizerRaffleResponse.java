@@ -16,6 +16,7 @@ public record OrganizerRaffleResponse(
         String prizeName,
         long participantCount,
         long reservedCount,
+        long paidCount,
         PublicationStatus publicationStatus,
         OperationalStatus operationalStatus,
         Integer winnerNumber,

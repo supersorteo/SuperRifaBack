@@ -1,14 +1,17 @@
 package com.rifas.platform.domain.payment.service;
 
+import com.rifas.platform.domain.execution.service.RaffleExecutionService;
 import com.rifas.platform.domain.notification.websocket.RaffleEventPublisher;
 import com.rifas.platform.domain.payment.entity.Payment;
 import com.rifas.platform.domain.payment.entity.PaymentAttempt;
 import com.rifas.platform.domain.payment.repository.PaymentRepository;
+import com.rifas.platform.domain.raffle.entity.Raffle;
 import com.rifas.platform.domain.raffle.entity.RaffleNumber;
 import com.rifas.platform.domain.raffle.repository.RaffleNumberRepository;
 import com.rifas.platform.domain.reservation.entity.Reservation;
 import com.rifas.platform.domain.reservation.repository.ReservationRepository;
 import com.rifas.platform.shared.audit.service.AuditService;
+import com.rifas.platform.shared.enums.DrawMethod;
 import com.rifas.platform.shared.enums.NumberStatus;
 import com.rifas.platform.shared.enums.PaymentStatus;
 import com.rifas.platform.shared.enums.ReservationStatus;
@@ -37,6 +40,7 @@ public class PaymentService {
     private final ReservationRepository reservationRepository;
     private final RaffleEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final RaffleExecutionService raffleExecutionService;
 
     @Transactional
     public Payment approveManualPayment(UUID paymentId, String notes) {
@@ -153,6 +157,14 @@ public class PaymentService {
         long paid      = raffleNumberRepository.countByRaffleAndStatus(reservation.getRaffle(), NumberStatus.PAID);
         eventPublisher.publishNumbersUpdated(raffleId, (int) available, (int) reserved, (int) paid);
         eventPublisher.publishReservationConfirmed(raffleId, raffleTitle, participantName, nums, amount);
+
+        Raffle raffle = reservation.getRaffle();
+        if (raffle.getDrawMethod() == DrawMethod.AUTOMATIC
+                && raffle.getWinnerNumber() == null
+                && available == 0
+                && reserved == 0) {
+            raffleExecutionService.executeAutomaticDraw(raffle.getId());
+        }
     }
 
     private Payment findPayment(UUID id) {
