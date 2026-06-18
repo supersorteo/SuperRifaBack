@@ -111,7 +111,8 @@ public class MercadoPagoService {
             PaymentClient client = new PaymentClient();
             Payment mpPayment = client.get(Long.parseLong(dataId), opts);
             PaymentStatus status = mapMpStatus(mpPayment.getStatus());
-            paymentService.syncFromWebhook(dataId, status, mpPayment.getStatus());
+            String externalReference = mpPayment.getExternalReference();
+            paymentService.syncFromWebhook(dataId, externalReference, status, mpPayment.getStatus());
         } catch (MPApiException | MPException ex) {
             log.error("Failed to process MP webhook for payment {}: {}", dataId, ex.getMessage());
         }
