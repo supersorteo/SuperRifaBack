@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 
@@ -98,11 +99,12 @@ public class MercadoPagoService {
     public void processWebhook(String dataId, String mpUserId, String xSignature, String xRequestId) {
         log.info("[WEBHOOK] Recibido: mpPaymentId={}, mpUserId={}", dataId, mpUserId);
 
-        // Validación de firma: no-bloqueante — solo registra advertencia para evitar
-        // que una clave mal configurada bloquee la confirmación de pagos reales.
+        // Validación de firma: bloqueante cuando MP_WEBHOOK_SECRET está configurado.
+        // Para deshabilitar, dejá MP_WEBHOOK_SECRET vacío en Railway.
         if (mpProps.getWebhookSecret() != null && !mpProps.getWebhookSecret().isBlank()) {
             if (!isSignatureValid(dataId, xSignature, xRequestId)) {
-                log.warn("[WEBHOOK] Firma inválida para mpPaymentId={} — procesando igual. Verificá MP_WEBHOOK_SECRET en Railway.", dataId);
+                log.error("[WEBHOOK] Firma inválida para mpPaymentId={}. Verificá MP_WEBHOOK_SECRET en Railway, o dejalo vacío para deshabilitar la validación.", dataId);
+                return;
             }
         }
 
@@ -175,7 +177,7 @@ public class MercadoPagoService {
     }
 
     private boolean isSignatureValid(String dataId, String xSignature, String xRequestId) {
-        if (xSignature == null || xRequestId == null) return true;
+        if (xSignature == null || xRequestId == null) return false;
         try {
             String ts = null, v1 = null;
             for (String part : xSignature.split(",")) {
@@ -185,14 +187,14 @@ public class MercadoPagoService {
                     if ("v1".equals(kv[0])) v1 = kv[1];
                 }
             }
-            if (ts == null || v1 == null) return true;
+            if (ts == null || v1 == null) return false;
             String manifest = "id:" + dataId + ";request-id:" + xRequestId + ";ts:" + ts;
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(
                     mpProps.getWebhookSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            String computed = HexFormat.of().formatHex(
-                    mac.doFinal(manifest.getBytes(StandardCharsets.UTF_8)));
-            return computed.equals(v1);
+            byte[] computed = mac.doFinal(manifest.getBytes(StandardCharsets.UTF_8));
+            byte[] expected = HexFormat.of().parseHex(v1);
+            return MessageDigest.isEqual(computed, expected);
         } catch (Exception ex) {
             log.warn("[WEBHOOK] Error evaluando firma: {}", ex.getMessage());
             return false;
