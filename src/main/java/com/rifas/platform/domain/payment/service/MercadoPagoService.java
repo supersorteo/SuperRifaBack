@@ -97,15 +97,18 @@ public class MercadoPagoService {
     }
 
     public void processWebhook(String dataId, String mpUserId, String xSignature, String xRequestId) {
-        log.info("[WEBHOOK] Recibido: mpPaymentId={}, mpUserId={}", dataId, mpUserId);
+        boolean secretConfigured = mpProps.getWebhookSecret() != null && !mpProps.getWebhookSecret().isBlank();
+        log.info("[WEBHOOK] Recibido: mpPaymentId={}, mpUserId={}, firmaHeader={}, secretConfigurado={}",
+                dataId, mpUserId, xSignature != null ? "SI" : "NO", secretConfigured);
 
-        // Validación de firma: bloqueante cuando MP_WEBHOOK_SECRET está configurado.
-        // Para deshabilitar, dejá MP_WEBHOOK_SECRET vacío en Railway.
-        if (mpProps.getWebhookSecret() != null && !mpProps.getWebhookSecret().isBlank()) {
+        if (secretConfigured) {
             if (!isSignatureValid(dataId, xSignature, xRequestId)) {
-                log.error("[WEBHOOK] Firma inválida para mpPaymentId={}. Verificá MP_WEBHOOK_SECRET en Railway, o dejalo vacío para deshabilitar la validación.", dataId);
+                log.error("[WEBHOOK] BLOQUEADO — firma inválida para mpPaymentId={}. Borrá MP_WEBHOOK_SECRET en Railway para deshabilitar la validación.", dataId);
                 return;
             }
+            log.info("[WEBHOOK] Firma válida para mpPaymentId={}", dataId);
+        } else {
+            log.info("[WEBHOOK] Sin secret configurado — omitiendo validación de firma para mpPaymentId={}", dataId);
         }
 
         // Intento 1: token del organizador via mpUserId almacenado
