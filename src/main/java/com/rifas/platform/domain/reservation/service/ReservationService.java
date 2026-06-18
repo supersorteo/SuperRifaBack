@@ -98,6 +98,8 @@ public class ReservationService {
         List<Integer> nums = reserved.stream().map(RaffleNumber::getNumber).toList();
         eventPublisher.publishNumbersReserved(raffle.getId(), nums);
         eventPublisher.publishNumbersUpdated(raffle.getId(), (int) available, (int) reservedCount, (int) paid);
+        eventPublisher.publishNewReservation(raffle.getId(), raffle.getTitle(),
+                reservation.getParticipant().getFullName(), nums, reservation.getTotalAmount());
 
         if (available == 0 && reservedCount > 0 && raffle.getWinnerNumber() == null) {
             raffleExecutionService.executeAutomaticDraw(raffle.getId());

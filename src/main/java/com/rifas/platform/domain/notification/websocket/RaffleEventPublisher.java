@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,17 @@ public class RaffleEventPublisher {
                 "/topic/raffle/" + raffleId + "/progress",
                 Map.of("raffleId", raffleId, "available", available,
                         "reserved", reserved, "paid", paid, "ts", Instant.now())
+        );
+    }
+
+    public void publishNewReservation(UUID raffleId, String raffleTitle,
+                                       String participantName, List<Integer> numbers,
+                                       BigDecimal amount) {
+        messaging.convertAndSend(
+                "/topic/raffle/" + raffleId + "/new-reservation",
+                Map.of("raffleId", raffleId, "raffleTitle", raffleTitle,
+                        "participantName", participantName,
+                        "numbers", numbers, "amount", amount, "ts", Instant.now())
         );
     }
 }
