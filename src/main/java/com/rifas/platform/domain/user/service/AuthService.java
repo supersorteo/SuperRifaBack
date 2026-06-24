@@ -8,6 +8,7 @@ import com.rifas.platform.domain.plan.entity.Plan;
 import com.rifas.platform.domain.plan.entity.Subscription;
 import com.rifas.platform.domain.plan.repository.PlanRepository;
 import com.rifas.platform.domain.plan.repository.SubscriptionRepository;
+import com.rifas.platform.domain.vip.service.OrganizerQuotaService;
 import com.rifas.platform.domain.user.dto.LoginRequest;
 import com.rifas.platform.domain.user.dto.RegisterRequest;
 import com.rifas.platform.domain.user.dto.TokenResponse;
@@ -47,6 +48,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
+    private final OrganizerQuotaService quotaService;
 
     @Transactional
     public TokenResponse register(RegisterRequest req) {
@@ -84,6 +86,8 @@ public class AuthService {
                     .startDate(LocalDateTime.now())
                     .build());
         }
+
+        quotaService.initializeForOrganizer(profile);
 
         Authentication auth = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(req.email(), req.password()));

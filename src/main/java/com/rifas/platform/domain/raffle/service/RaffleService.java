@@ -16,6 +16,7 @@ import com.rifas.platform.domain.reservation.repository.ReservationRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleImageRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleNumberRepository;
 import com.rifas.platform.domain.raffle.repository.RaffleRepository;
+import com.rifas.platform.domain.vip.service.OrganizerQuotaService;
 import com.rifas.platform.shared.audit.service.AuditService;
 import com.rifas.platform.domain.user.entity.User;
 import com.rifas.platform.shared.enums.*;
@@ -52,9 +53,12 @@ public class RaffleService {
     private final AuditService auditService;
     private final ImageStorageService imageStorageService;
     private final RaffleEventPublisher eventPublisher;
+    private final OrganizerQuotaService quotaService;
 
     public OrganizerRaffleResponse create(CreateRaffleRequest req) {
         OrganizerProfile organizer = currentOrganizer();
+
+        quotaService.assertCanCreate(organizer);
 
         String slug = generateUniqueSlug(req.title());
 
@@ -86,6 +90,8 @@ public class RaffleService {
         }
 
         Raffle saved = raffleRepository.save(raffle);
+
+        quotaService.consumeRaffleQuota(organizer.getId(), saved.getId());
 
         // Crear todos los RaffleNumber en batch
         List<RaffleNumber> numbers = IntStream
@@ -171,6 +177,8 @@ public class RaffleService {
 
     public void delete(UUID raffleId) {
         Raffle raffle = findOwnedRaffle(raffleId);
+
+        quotaService.restoreQuotaIfApplicable(raffle.getOrganizer(), raffle);
 
         raffleImageRepository.findByRaffleIdOrderByDisplayOrder(raffleId).stream()
                 .map(RaffleImage::getPublicId)
