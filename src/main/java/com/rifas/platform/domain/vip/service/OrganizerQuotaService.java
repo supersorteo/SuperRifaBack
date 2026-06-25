@@ -6,6 +6,7 @@ import com.rifas.platform.domain.raffle.entity.Raffle;
 import com.rifas.platform.domain.vip.dto.OrganizerQuotaSummaryDto;
 import com.rifas.platform.domain.vip.entity.OrganizerQuota;
 import com.rifas.platform.domain.vip.repository.OrganizerQuotaRepository;
+import com.rifas.platform.shared.audit.service.AuditService;
 import com.rifas.platform.shared.enums.PublicationStatus;
 import com.rifas.platform.shared.exception.BusinessException;
 import com.rifas.platform.shared.exception.PlanLimitExceededException;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -21,6 +23,7 @@ public class OrganizerQuotaService {
 
     private final OrganizerQuotaRepository quotaRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final AuditService auditService;
 
     /**
      * Crea la cuota inicial para un organizer recién registrado.
@@ -149,6 +152,10 @@ public class OrganizerQuotaService {
         }
         quota.setAvailableRaffles(quota.getAvailableRaffles() - 1);
         quotaRepository.save(quota);
+        auditService.log("VIP_QUOTA_CONSUMED", "OrganizerQuota", quota.getId(), null,
+                Map.of("organizerId", organizerId.toString(),
+                       "raffleId", raffleId.toString(),
+                       "remaining", quota.getAvailableRaffles()));
     }
 
     /**

@@ -8,6 +8,7 @@ import com.rifas.platform.domain.vip.entity.VipCode;
 import com.rifas.platform.domain.vip.entity.VipPackage;
 import com.rifas.platform.domain.vip.repository.VipCodeRepository;
 import com.rifas.platform.domain.vip.repository.VipPackageRepository;
+import com.rifas.platform.shared.audit.service.AuditService;
 import com.rifas.platform.shared.enums.VipCodeSource;
 import com.rifas.platform.shared.enums.VipCodeStatus;
 import com.rifas.platform.shared.exception.BusinessException;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -28,6 +30,7 @@ public class VipCodeService {
     private final VipPackageRepository  packageRepository;
     private final OrganizerProfileRepository organizerProfileRepository;
     private final OrganizerQuotaService quotaService;
+    private final AuditService auditService;
 
     // ── Admin operations ──────────────────────────────────────────────────
 
@@ -59,7 +62,11 @@ public class VipCodeService {
                 .generatedByAdminUserId(adminUserId)
                 .build();
 
-        return toResponse(codeRepository.save(code));
+        VipCode saved = codeRepository.save(code);
+        auditService.log("VIP_CODE_GENERATED", "VipCode", saved.getId(), null,
+                Map.of("code", saved.getCode(), "package", pkg.getName(),
+                       "assignedTo", assignedTo != null ? assignedTo.getId().toString() : "none"));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -72,7 +79,10 @@ public class VipCodeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Organizer no encontrado"));
         code.setAssignedOrganizer(organizer);
         code.setStatus(VipCodeStatus.ASSIGNED);
-        return toResponse(codeRepository.save(code));
+        VipCode saved = codeRepository.save(code);
+        auditService.log("VIP_CODE_ASSIGNED", "VipCode", saved.getId(), null,
+                Map.of("code", saved.getCode(), "organizerId", organizer.getId().toString()));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -115,6 +125,9 @@ public class VipCodeService {
         codeRepository.save(code);
 
         quotaService.creditVipQuota(organizer.getId(), code.getRaffleQuantity(), code.getCode());
+        auditService.log("VIP_CODE_REDEEMED", "VipCode", code.getId(), null,
+                Map.of("code", code.getCode(), "organizerId", organizer.getId().toString(),
+                       "quantity", code.getRaffleQuantity()));
 
         return toResponse(code);
     }

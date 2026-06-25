@@ -78,4 +78,11 @@ public class AdminVipController {
     public ResponseEntity<List<VipPurchaseDto>> listPurchases() {
         return ResponseEntity.ok(purchaseService.getAllForAdmin());
     }
+
+    // ── Organizer VIP summary ─────────────────────────────────────────────
+
+    @GetMapping("/organizers/{organizerId}/summary")
+    public ResponseEntity<OrganizerVipSummaryDto> organizerSummary(@PathVariable UUID organizerId) {
+        return ResponseEntity.ok(purchaseService.getOrganizerVipSummary(organizerId));
+    }
 }

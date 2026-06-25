@@ -2,6 +2,8 @@ package com.rifas.platform.domain.vip.service;
 
 import com.rifas.platform.domain.organizer.entity.OrganizerProfile;
 import com.rifas.platform.domain.vip.dto.CreateVipPreferenceRequest;
+import com.rifas.platform.domain.vip.dto.OrganizerQuotaSummaryDto;
+import com.rifas.platform.domain.vip.dto.OrganizerVipSummaryDto;
 import com.rifas.platform.domain.vip.dto.VipPreferenceResponse;
 import com.rifas.platform.domain.vip.dto.VipPurchaseDto;
 import com.rifas.platform.domain.vip.entity.VipCode;
@@ -10,6 +12,7 @@ import com.rifas.platform.domain.vip.entity.VipPurchase;
 import com.rifas.platform.domain.vip.repository.VipCodeRepository;
 import com.rifas.platform.domain.vip.repository.VipPackageRepository;
 import com.rifas.platform.domain.vip.repository.VipPurchaseRepository;
+import com.rifas.platform.shared.audit.service.AuditService;
 import com.rifas.platform.shared.enums.VipCodeSource;
 import com.rifas.platform.shared.enums.VipCodeStatus;
 import com.rifas.platform.shared.enums.VipPurchaseStatus;
@@ -20,8 +23,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -34,6 +39,7 @@ public class VipPurchaseService {
     private final VipCodeRepository     codeRepository;
     private final OrganizerQuotaService quotaService;
     private final VipMercadoPagoService mpService;
+    private final AuditService auditService;
 
     // ── Organizer: crear preferencia ─────────────────────────────────────
 
@@ -117,6 +123,11 @@ public class VipPurchaseService {
                 purchase.getVipPackage().getRaffleQuantity(),
                 "MP:" + externalPaymentId
         );
+        auditService.log("VIP_PURCHASE_APPROVED", "VipPurchase", purchase.getId(), null,
+                Map.of("mpPaymentId", externalPaymentId,
+                       "organizerId", purchase.getOrganizer().getId().toString(),
+                       "package", purchase.getVipPackage().getName(),
+                       "quantity", purchase.getVipPackage().getRaffleQuantity()));
 
         log.info("[VIP-WEBHOOK] Compra VIP {} aprobada. Organizer {} acredita {} cupos.",
                 purchaseId, purchase.getOrganizer().getId(),
@@ -135,6 +146,31 @@ public class VipPurchaseService {
     public List<VipPurchaseDto> getAllForAdmin() {
         return purchaseRepository.findAllWithDetails()
                 .stream().map(p -> toDto(p, true)).toList();
+    }
+
+    // ── Organizer VIP summary ─────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public OrganizerVipSummaryDto getOrganizerVipSummary(UUID organizerId) {
+        OrganizerQuotaSummaryDto quota = quotaService.getQuotaSummary(organizerId);
+        List<VipPurchase> purchases = purchaseRepository.findByOrganizerWithPackage(organizerId);
+        int approved = (int) purchases.stream()
+                .filter(p -> p.getStatus() == VipPurchaseStatus.APPROVED).count();
+        BigDecimal totalSpent = purchases.stream()
+                .filter(p -> p.getStatus() == VipPurchaseStatus.APPROVED)
+                .map(VipPurchase::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        int codesRedeemed = (int) codeRepository
+                .findAllByRedeemedByOrganizerIdOrderByRedeemedAtDesc(organizerId)
+                .stream().count();
+        List<VipPurchaseDto> recent = purchases.stream()
+                .limit(5).map(p -> toDto(p, false)).toList();
+        return new OrganizerVipSummaryDto(
+                quota.planName(), quota.availableRaffles(),
+                quota.freeGranted(), quota.freeConsumed(),
+                quota.vipPurchased(), quota.vipConsumed(), quota.isVip(),
+                purchases.size(), approved, totalSpent, codesRedeemed, recent
+        );
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
