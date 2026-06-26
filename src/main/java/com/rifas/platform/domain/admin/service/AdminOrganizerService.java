@@ -6,6 +6,7 @@ import com.rifas.platform.domain.admin.dto.AdminRaffleDto;
 import com.rifas.platform.domain.execution.repository.RaffleExecutionRepository;
 import com.rifas.platform.domain.organizer.entity.OrganizerProfile;
 import com.rifas.platform.domain.organizer.repository.OrganizerProfileRepository;
+import com.rifas.platform.domain.participant.repository.ParticipantRepository;
 import com.rifas.platform.domain.payment.repository.PaymentMethodRepository;
 import com.rifas.platform.domain.plan.repository.SubscriptionRepository;
 import com.rifas.platform.domain.raffle.entity.Raffle;
@@ -18,13 +19,19 @@ import com.rifas.platform.domain.reservation.entity.Reservation;
 import com.rifas.platform.domain.reservation.repository.ReservationRepository;
 import com.rifas.platform.domain.user.entity.User;
 import com.rifas.platform.domain.user.repository.UserRepository;
+import com.rifas.platform.domain.vip.entity.VipPurchase;
+import com.rifas.platform.domain.vip.repository.OrganizerQuotaRepository;
+import com.rifas.platform.domain.vip.repository.VipCodeRepository;
+import com.rifas.platform.domain.vip.repository.VipPurchaseRepository;
 import com.rifas.platform.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -38,8 +45,12 @@ public class AdminOrganizerService {
     private final RaffleNumberRepository     raffleNumberRepository;
     private final RaffleExecutionRepository  raffleExecutionRepository;
     private final ReservationRepository      reservationRepository;
+    private final ParticipantRepository      participantRepository;
     private final PaymentMethodRepository    paymentMethodRepository;
     private final SubscriptionRepository     subscriptionRepository;
+    private final OrganizerQuotaRepository   organizerQuotaRepository;
+    private final VipPurchaseRepository      vipPurchaseRepository;
+    private final VipCodeRepository          vipCodeRepository;
     private final ImageStorageService        imageStorageService;
     private final PasswordEncoder            passwordEncoder;
 
@@ -99,8 +110,37 @@ public class AdminOrganizerService {
         raffleRepository.findByOrganizerIdOrderByCreatedAtDesc(organizerId)
                 .forEach(this::deleteRaffleInternal);
 
+        List<VipPurchase> vipPurchases = vipPurchaseRepository.findAllByOrganizerId(organizerId);
+        Set<UUID> relatedCodeIds = new HashSet<>();
+        vipPurchases.stream()
+                .map(VipPurchase::getGeneratedCode)
+                .filter(code -> code != null)
+                .map(code -> code.getId())
+                .forEach(relatedCodeIds::add);
+
+        vipCodeRepository.findAllByAssignedOrganizerIdOrderByCreatedAtDesc(organizerId).stream()
+                .map(code -> code.getId())
+                .forEach(relatedCodeIds::add);
+
+        vipCodeRepository.findAllByRedeemedByOrganizerIdOrderByRedeemedAtDesc(organizerId).stream()
+                .map(code -> code.getId())
+                .forEach(relatedCodeIds::add);
+
+        if (!vipPurchases.isEmpty()) {
+            vipPurchaseRepository.deleteAll(vipPurchases);
+        }
+        if (!relatedCodeIds.isEmpty()) {
+            vipCodeRepository.deleteAllById(relatedCodeIds);
+        }
+
+        organizerQuotaRepository.deleteByOrganizerId(organizerId);
         paymentMethodRepository.deleteByOrganizerId(organizerId);
         subscriptionRepository.deleteByOrganizerId(organizerId);
+
+        if (organizer.getAvatarPublicId() != null && !organizer.getAvatarPublicId().isBlank()) {
+            imageStorageService.delete(organizer.getAvatarPublicId());
+        }
+
         organizerProfileRepository.delete(organizer);
         userRepository.delete(organizer.getUser());
     }
@@ -119,9 +159,22 @@ public class AdminOrganizerService {
         raffleNumberRepository.deleteByRaffle(raffle);
 
         List<Reservation> reservations = reservationRepository.findByRaffleId(raffleId);
+        Set<UUID> participantIds = new HashSet<>();
+        reservations.stream()
+                .map(Reservation::getParticipant)
+                .filter(participant -> participant != null)
+                .map(participant -> participant.getId())
+                .forEach(participantIds::add);
+
         if (!reservations.isEmpty()) {
             reservationRepository.deleteAll(reservations);
         }
+
+        participantIds.forEach(participantId -> {
+            if (reservationRepository.findByParticipantId(participantId).isEmpty()) {
+                participantRepository.deleteById(participantId);
+            }
+        });
 
         raffleRepository.delete(raffle);
     }

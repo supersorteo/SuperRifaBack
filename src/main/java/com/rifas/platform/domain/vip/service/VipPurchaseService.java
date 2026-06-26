@@ -38,6 +38,7 @@ public class VipPurchaseService {
     private final VipPackageRepository  packageRepository;
     private final VipCodeRepository     codeRepository;
     private final OrganizerQuotaService quotaService;
+    private final VipCodeGenerator      codeGenerator;
     private final VipMercadoPagoService mpService;
     private final AuditService auditService;
 
@@ -100,7 +101,7 @@ public class VipPurchaseService {
 
         // Generar VipCode interno con fuente MERCADO_PAGO
         VipCode code = VipCode.builder()
-                .code(generateUniqueCode())
+                .code(codeGenerator.generateUniqueCode(purchase.getVipPackage().getRaffleQuantity()))
                 .vipPackage(purchase.getVipPackage())
                 .raffleQuantity(purchase.getVipPackage().getRaffleQuantity())
                 .price(purchase.getAmount())
@@ -191,16 +192,4 @@ public class VipPurchaseService {
         );
     }
 
-    private String generateUniqueCode() {
-        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        String code;
-        do {
-            StringBuilder sb = new StringBuilder("VIP-");
-            for (int i = 0; i < 4; i++) sb.append(chars.charAt((int) (Math.random() * chars.length())));
-            sb.append("-");
-            for (int i = 0; i < 4; i++) sb.append(chars.charAt((int) (Math.random() * chars.length())));
-            code = sb.toString();
-        } while (codeRepository.existsByCode(code));
-        return code;
-    }
 }

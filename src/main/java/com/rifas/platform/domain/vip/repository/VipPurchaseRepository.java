@@ -30,6 +30,10 @@ public interface VipPurchaseRepository extends JpaRepository<VipPurchase, UUID> 
             """)
     List<VipPurchase> findAllWithDetails();
 
+    List<VipPurchase> findAllByOrganizerId(UUID organizerId);
+
+    void deleteByOrganizerId(UUID organizerId);
+
     /** Idempotencia: un payment_id de MP nunca debe procesarse dos veces. */
     Optional<VipPurchase> findByExternalPaymentId(String externalPaymentId);
 

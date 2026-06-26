@@ -67,7 +67,7 @@ public class OrganizerVipController {
     // ── Helper ────────────────────────────────────────────────────────────
 
     private OrganizerProfile currentOrganizer() {
-        return profileRepository.findByUserId(currentUserId())
+        return profileRepository.findByUserIdWithUser(currentUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Perfil no encontrado"));
     }
 
