@@ -32,6 +32,8 @@ public interface VipPurchaseRepository extends JpaRepository<VipPurchase, UUID> 
 
     List<VipPurchase> findAllByOrganizerId(UUID organizerId);
 
+    boolean existsByVipPackageId(UUID vipPackageId);
+
     void deleteByOrganizerId(UUID organizerId);
 
     /** Idempotencia: un payment_id de MP nunca debe procesarse dos veces. */

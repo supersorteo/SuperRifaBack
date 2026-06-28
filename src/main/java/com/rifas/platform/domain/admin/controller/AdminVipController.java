@@ -62,6 +62,12 @@ public class AdminVipController {
         return ResponseEntity.ok(packageService.toggleActive(id));
     }
 
+    @DeleteMapping("/packages/{id}")
+    public ResponseEntity<Void> deletePackage(@PathVariable UUID id) {
+        packageService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/codes")
     public ResponseEntity<List<VipCodeResponse>> listCodes() {
         return ResponseEntity.ok(codeService.findAll());

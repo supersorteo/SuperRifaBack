@@ -3,7 +3,9 @@ package com.rifas.platform.domain.vip.service;
 import com.rifas.platform.domain.vip.dto.VipPackageDto;
 import com.rifas.platform.domain.vip.dto.VipPackageRequest;
 import com.rifas.platform.domain.vip.entity.VipPackage;
+import com.rifas.platform.domain.vip.repository.VipCodeRepository;
 import com.rifas.platform.domain.vip.repository.VipPackageRepository;
+import com.rifas.platform.domain.vip.repository.VipPurchaseRepository;
 import com.rifas.platform.shared.exception.BusinessException;
 import com.rifas.platform.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,8 @@ import java.util.UUID;
 public class VipPackageService {
 
     private final VipPackageRepository packageRepository;
+    private final VipCodeRepository codeRepository;
+    private final VipPurchaseRepository purchaseRepository;
 
     @Transactional(readOnly = true)
     public List<VipPackageDto> findAllActive() {
@@ -71,6 +75,21 @@ public class VipPackageService {
                 .orElseThrow(() -> new ResourceNotFoundException("Paquete VIP no encontrado"));
         pkg.setActive(!pkg.isActive());
         return toDto(packageRepository.save(pkg));
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        VipPackage pkg = packageRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Paquete VIP no encontrado"));
+
+        if (codeRepository.existsByVipPackageId(id)) {
+            throw new BusinessException("No se puede eliminar el paquete \"" + pkg.getName() + "\" porque ya tiene códigos VIP generados.");
+        }
+        if (purchaseRepository.existsByVipPackageId(id)) {
+            throw new BusinessException("No se puede eliminar el paquete \"" + pkg.getName() + "\" porque ya tiene compras VIP registradas.");
+        }
+
+        packageRepository.delete(pkg);
     }
 
     private VipPackageDto toDto(VipPackage pkg) {
