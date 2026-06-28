@@ -34,11 +34,12 @@ public class VipPackageService {
 
     @Transactional
     public VipPackageDto create(VipPackageRequest req) {
-        if (packageRepository.existsByName(req.name())) {
-            throw new BusinessException("Ya existe un paquete con ese nombre");
+        String normalizedName = normalizeName(req.name());
+        if (packageRepository.existsByNameIgnoreCase(normalizedName)) {
+            throw new BusinessException("Ya existe un paquete VIP con el nombre \"" + normalizedName + "\"");
         }
         VipPackage pkg = VipPackage.builder()
-                .name(req.name())
+                .name(normalizedName)
                 .raffleQuantity(req.raffleQuantity())
                 .price(req.price())
                 .currency(req.currency() != null ? req.currency() : "USD")
@@ -52,10 +53,11 @@ public class VipPackageService {
     public VipPackageDto update(UUID id, VipPackageRequest req) {
         VipPackage pkg = packageRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Paquete VIP no encontrado"));
-        if (!pkg.getName().equals(req.name()) && packageRepository.existsByName(req.name())) {
-            throw new BusinessException("Ya existe un paquete con ese nombre");
+        String normalizedName = normalizeName(req.name());
+        if (!pkg.getName().equalsIgnoreCase(normalizedName) && packageRepository.existsByNameIgnoreCase(normalizedName)) {
+            throw new BusinessException("Ya existe un paquete VIP con el nombre \"" + normalizedName + "\"");
         }
-        pkg.setName(req.name());
+        pkg.setName(normalizedName);
         pkg.setRaffleQuantity(req.raffleQuantity());
         pkg.setPrice(req.price());
         if (req.currency() != null) pkg.setCurrency(req.currency());
@@ -74,5 +76,9 @@ public class VipPackageService {
     private VipPackageDto toDto(VipPackage pkg) {
         return new VipPackageDto(pkg.getId(), pkg.getName(), pkg.getRaffleQuantity(),
                 pkg.getPrice(), pkg.getCurrency(), pkg.getDisplayOrder(), pkg.isActive());
+    }
+
+    private String normalizeName(String name) {
+        return name == null ? "" : name.trim().replaceAll("\\s{2,}", " ");
     }
 }

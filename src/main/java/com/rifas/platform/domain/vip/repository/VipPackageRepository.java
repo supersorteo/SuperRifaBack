@@ -16,4 +16,8 @@ public interface VipPackageRepository extends JpaRepository<VipPackage, UUID> {
     Optional<VipPackage> findByName(String name);
 
     boolean existsByName(String name);
+
+    Optional<VipPackage> findByNameIgnoreCase(String name);
+
+    boolean existsByNameIgnoreCase(String name);
 }
