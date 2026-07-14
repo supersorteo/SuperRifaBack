@@ -24,6 +24,7 @@ import com.rifas.platform.domain.vip.repository.OrganizerQuotaRepository;
 import com.rifas.platform.domain.vip.repository.VipCodeRepository;
 import com.rifas.platform.domain.vip.repository.VipPurchaseRepository;
 import com.rifas.platform.shared.exception.ResourceNotFoundException;
+import com.rifas.platform.shared.security.EncryptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -53,22 +54,35 @@ public class AdminOrganizerService {
     private final VipCodeRepository          vipCodeRepository;
     private final ImageStorageService        imageStorageService;
     private final PasswordEncoder            passwordEncoder;
+    private final EncryptionService          encryptionService;
 
     @Transactional
     public void resetPasswordById(UUID organizerId, String newPassword) {
-        OrganizerProfile profile = organizerProfileRepository.findById(organizerId)
+        OrganizerProfile profile = organizerProfileRepository.findByIdWithUser(organizerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organizador no encontrado"));
-        User user = profile.getUser();
+        User user = userRepository.findById(profile.getUser().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordEncrypted(encryptionService.encrypt(newPassword));
         userRepository.save(user);
     }
 
     @Transactional
     public void resetPasswordByEmail(String email, String newPassword) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new ResourceNotFoundException("No existe usuario con email: " + email));
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordEncrypted(encryptionService.encrypt(newPassword));
         userRepository.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public String getOrganizerPassword(UUID organizerId) {
+        OrganizerProfile profile = organizerProfileRepository.findByIdWithUser(organizerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organizador no encontrado"));
+        String encrypted = profile.getUser().getPasswordEncrypted();
+        if (encrypted == null || encrypted.isBlank()) return null;
+        return encryptionService.decrypt(encrypted);
     }
 
     @Transactional(readOnly = true)

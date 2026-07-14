@@ -22,5 +22,7 @@ public interface VipCodeRepository extends JpaRepository<VipCode, UUID> {
 
     List<VipCode> findAllByRedeemedByOrganizerIdOrderByRedeemedAtDesc(UUID organizerId);
 
+    int countByVipPackageIdAndStatus(UUID vipPackageId, VipCodeStatus status);
+
     boolean existsByVipPackageId(UUID vipPackageId);
 }

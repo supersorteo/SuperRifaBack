@@ -34,8 +34,8 @@ public class VipCodeService {
     private final OrganizerProfileRepository organizerProfileRepository;
     private final OrganizerQuotaService quotaService;
     private final VipCodeGenerator codeGenerator;
-    private final AdminOrganizerService adminOrganizerService;
     private final AuditService auditService;
+    private final AdminOrganizerService adminOrganizerService;
 
     @Transactional(readOnly = true)
     public List<VipCodeResponse> findAll() {
@@ -49,7 +49,18 @@ public class VipCodeService {
         VipPackage pkg = findPackage(req.packageId());
         OrganizerProfile assignedTo = findAssignedOrganizer(req.organizerId());
 
-        VipCode saved = codeRepository.save(buildManualCode(pkg, assignedTo, adminUserId));
+        VipCode code = buildManualCode(pkg, assignedTo, adminUserId);
+        if (assignedTo != null) {
+            code.setStatus(VipCodeStatus.REDEEMED);
+            code.setRedeemedByOrganizer(assignedTo);
+            code.setRedeemedAt(LocalDateTime.now());
+        }
+        VipCode saved = codeRepository.save(code);
+
+        if (assignedTo != null) {
+            quotaService.creditVipQuota(assignedTo.getId(), pkg.getRaffleQuantity(), saved.getCode());
+        }
+
         auditService.log("VIP_CODE_GENERATED", "VipCode", saved.getId(), null,
                 Map.of(
                         "code", saved.getCode(),
@@ -95,11 +106,16 @@ public class VipCodeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Organizer no encontrado"));
 
         code.setAssignedOrganizer(organizer);
-        code.setStatus(VipCodeStatus.ASSIGNED);
+        code.setStatus(VipCodeStatus.REDEEMED);
+        code.setRedeemedByOrganizer(organizer);
+        code.setRedeemedAt(LocalDateTime.now());
         VipCode saved = codeRepository.save(code);
 
+        quotaService.creditVipQuota(organizer.getId(), code.getRaffleQuantity(), code.getCode());
+
         auditService.log("VIP_CODE_ASSIGNED", "VipCode", saved.getId(), null,
-                Map.of("code", saved.getCode(), "organizerId", organizer.getId().toString()));
+                Map.of("code", saved.getCode(), "organizerId", organizer.getId().toString(),
+                       "quantity", code.getRaffleQuantity()));
         return toResponse(saved);
     }
 
@@ -115,28 +131,23 @@ public class VipCodeService {
 
         code.setStatus(VipCodeStatus.CANCELLED);
         return toResponse(codeRepository.save(code));
-    }
+    } 
 
     @Transactional
     public void delete(UUID codeId) {
         VipCode code = findCodeById(codeId);
-        OrganizerProfile organizer = code.getRedeemedByOrganizer() != null
-                ? code.getRedeemedByOrganizer()
-                : code.getAssignedOrganizer();
 
-        if (organizer != null) {
-            auditService.log("VIP_CODE_PURGE_WITH_ORGANIZER", "VipCode", code.getId(), null,
-                    Map.of(
-                            "code", code.getCode(),
-                            "organizerId", organizer.getId().toString()
-                    ));
-            adminOrganizerService.deleteOrganizer(organizer.getId());
-            return;
+        OrganizerProfile redeemed = code.getRedeemedByOrganizer();
+        if (redeemed != null) {
+            // Deleting a redeemed code cascades: removes the organizer and all their data
+            adminOrganizerService.deleteOrganizer(redeemed.getId());
+            return; // code is deleted as part of the organizer cascade
         }
 
+        String codeName = code.getCode();
         codeRepository.delete(code);
-        auditService.log("VIP_CODE_DELETED", "VipCode", code.getId(), null,
-                Map.of("code", code.getCode()));
+        auditService.log("VIP_CODE_DELETED", "VipCode", codeId, null,
+                Map.of("code", codeName));
     }
 
     @Transactional

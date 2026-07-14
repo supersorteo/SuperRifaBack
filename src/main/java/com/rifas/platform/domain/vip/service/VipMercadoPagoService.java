@@ -75,6 +75,12 @@ public class VipMercadoPagoService {
                         .notificationUrl(baseUrl + "/api/payments/webhook/vip/mercadopago");
             }
 
+            // En sandbox MP exige payer distinto al vendedor; sin esto puede devolver PA_UNAUTHORIZED_RESULT_FROM_POLICIES
+            String sandboxPayer = mpProps.getSandboxPayerEmail();
+            if (mpProps.isSandbox() && sandboxPayer != null && !sandboxPayer.isBlank()) {
+                reqBuilder.payer(PreferencePayerRequest.builder().email(sandboxPayer).build());
+            }
+
             Preference preference = new PreferenceClient().create(reqBuilder.build(), opts);
 
             String url = mpProps.isSandbox()

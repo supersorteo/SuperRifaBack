@@ -29,6 +29,9 @@ public class User {
     @Column(nullable = false)
     private String passwordHash;
 
+    @Column(name = "password_encrypted", length = 500)
+    private String passwordEncrypted;
+
     @Column(nullable = false, length = 100)
     private String fullName;
 

@@ -13,4 +13,6 @@ public class MercadoPagoProperties {
     private String accessToken;
     private String webhookSecret;
     private boolean sandbox = true;
+    /** Email del comprador de prueba (test user sandbox de MP, diferente al vendedor). Solo requerido en sandbox. */
+    private String sandboxPayerEmail;
 }

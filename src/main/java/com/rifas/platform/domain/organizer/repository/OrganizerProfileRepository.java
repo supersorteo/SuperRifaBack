@@ -17,6 +17,9 @@ public interface OrganizerProfileRepository extends JpaRepository<OrganizerProfi
     @Query("SELECT p FROM OrganizerProfile p JOIN FETCH p.user WHERE p.user.id = :userId")
     Optional<OrganizerProfile> findByUserIdWithUser(UUID userId);
 
+    @Query("SELECT p FROM OrganizerProfile p JOIN FETCH p.user WHERE p.id = :id")
+    Optional<OrganizerProfile> findByIdWithUser(UUID id);
+
     @Query("SELECT p FROM OrganizerProfile p JOIN FETCH p.user ORDER BY p.createdAt DESC")
     List<OrganizerProfile> findAllWithUser();
 }

@@ -10,5 +10,6 @@ public record VipPackageDto(
         BigDecimal price,
         String currency,
         int displayOrder,
-        boolean active
+        boolean active,
+        int availableCodeCount
 ) {}

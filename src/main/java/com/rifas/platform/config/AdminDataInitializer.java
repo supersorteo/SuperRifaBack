@@ -37,7 +37,7 @@ public class AdminDataInitializer implements ApplicationRunner {
     }
 
     private void seedAdmin(Role role, AdminSeedProperties.AdminUser u) {
-        if (userRepository.existsByEmail(u.email())) return;
+        if (userRepository.existsByEmailIgnoreCase(u.email())) return;
         User user = User.builder()
                 .email(u.email())
                 .passwordHash(passwordEncoder.encode(u.password()))

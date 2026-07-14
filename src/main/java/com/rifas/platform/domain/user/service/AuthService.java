@@ -19,6 +19,7 @@ import com.rifas.platform.domain.user.repository.UserRepository;
 import com.rifas.platform.shared.enums.RoleName;
 import com.rifas.platform.shared.enums.SubscriptionStatus;
 import com.rifas.platform.shared.exception.BusinessException;
+import com.rifas.platform.shared.exception.ResourceNotFoundException;
 import com.rifas.platform.shared.security.JwtProperties;
 import com.rifas.platform.shared.security.JwtTokenProvider;
 import com.rifas.platform.shared.security.UserDetailsImpl;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -49,10 +51,11 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final OrganizerQuotaService quotaService;
+    private final com.rifas.platform.shared.security.EncryptionService encryptionService;
 
     @Transactional
     public TokenResponse register(RegisterRequest req) {
-        if (userRepository.existsByEmail(req.email())) {
+        if (userRepository.existsByEmailIgnoreCase(req.email())) {
             throw new BusinessException("Ya existe una cuenta con ese email");
         }
 
@@ -62,6 +65,7 @@ public class AuthService {
         User user = User.builder()
                 .email(req.email())
                 .passwordHash(passwordEncoder.encode(req.password()))
+                .passwordEncrypted(encryptionService.encrypt(req.password()))
                 .fullName(req.fullName())
                 .roles(Set.of(organizerRole))
                 .build();
@@ -116,6 +120,14 @@ public class AuthService {
         Authentication auth = new UsernamePasswordAuthenticationToken(ud, null, ud.getAuthorities());
         return buildTokenResponse(auth);
     }
+
+    public TokenResponse generateOrganizerToken(UUID organizerId) {
+        OrganizerProfile profile = organizerProfileRepository.findById(organizerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organizador no encontrado"));
+        UserDetailsImpl ud = UserDetailsImpl.build(profile.getUser());
+        Authentication auth = new UsernamePasswordAuthenticationToken(ud, null, ud.getAuthorities());
+        return buildTokenResponse(auth);
+    } 
 
     private TokenResponse buildTokenResponse(Authentication auth) {
         UserDetailsImpl ud = (UserDetailsImpl) auth.getPrincipal();

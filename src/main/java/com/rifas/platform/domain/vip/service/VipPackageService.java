@@ -6,6 +6,7 @@ import com.rifas.platform.domain.vip.entity.VipPackage;
 import com.rifas.platform.domain.vip.repository.VipCodeRepository;
 import com.rifas.platform.domain.vip.repository.VipPackageRepository;
 import com.rifas.platform.domain.vip.repository.VipPurchaseRepository;
+import com.rifas.platform.shared.enums.VipCodeStatus;
 import com.rifas.platform.shared.exception.BusinessException;
 import com.rifas.platform.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -93,11 +94,12 @@ public class VipPackageService {
     }
 
     private VipPackageDto toDto(VipPackage pkg) {
+        int availableCodeCount = codeRepository.countByVipPackageIdAndStatus(pkg.getId(), VipCodeStatus.GENERATED);
         return new VipPackageDto(pkg.getId(), pkg.getName(), pkg.getRaffleQuantity(),
-                pkg.getPrice(), pkg.getCurrency(), pkg.getDisplayOrder(), pkg.isActive());
+                pkg.getPrice(), pkg.getCurrency(), pkg.getDisplayOrder(), pkg.isActive(), availableCodeCount);
     }
 
     private String normalizeName(String name) {
         return name == null ? "" : name.trim().replaceAll("\\s{2,}", " ");
-    }
+    } 
 }
