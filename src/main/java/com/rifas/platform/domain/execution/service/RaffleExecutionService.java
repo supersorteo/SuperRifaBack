@@ -61,7 +61,7 @@ public class RaffleExecutionService {
     }
 
     private void queueDrawExecution(UUID raffleId, DrawMethod method, UUID executedBy) {
-        Raffle raffle = raffleRepository.findById(raffleId)
+        Raffle raffle = raffleRepository.findByIdWithPessimisticLock(raffleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
 
         if (raffle.getPublicationStatus() != PublicationStatus.PUBLISHED) {

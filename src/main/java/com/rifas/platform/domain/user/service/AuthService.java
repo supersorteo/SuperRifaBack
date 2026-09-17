@@ -106,12 +106,8 @@ public class AuthService {
     }
 
     public TokenResponse adminLogin(AdminLoginRequest req) {
-        User user = userRepository.findByFullNameIgnoreCase(req.username())
+        User user = userRepository.findAdminByUsername(req.username(), RoleName.ROLE_ADMIN)
                 .orElseThrow(() -> new BadCredentialsException("Credenciales incorrectas"));
-
-        boolean isAdmin = user.getRoles().stream()
-                .anyMatch(r -> r.getName() == RoleName.ROLE_ADMIN);
-        if (!isAdmin) throw new BadCredentialsException("Credenciales incorrectas");
 
         if (!passwordEncoder.matches(req.password(), user.getPasswordHash()))
             throw new BadCredentialsException("Credenciales incorrectas");

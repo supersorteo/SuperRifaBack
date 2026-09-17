@@ -29,6 +29,10 @@ public interface RaffleRepository extends JpaRepository<Raffle, UUID> {
     @Query("SELECT r FROM Raffle r WHERE r.slug = :slug")
     Optional<Raffle> findBySlugWithPessimisticLock(@Param("slug") String slug);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Raffle r WHERE r.id = :id")
+    Optional<Raffle> findByIdWithPessimisticLock(@Param("id") UUID id);
+
     @Query("""
         SELECT r FROM Raffle r
         WHERE r.publicationStatus = :pubStatus
@@ -39,7 +43,7 @@ public interface RaffleRepository extends JpaRepository<Raffle, UUID> {
           AND EXISTS (
             SELECT 1 FROM RaffleNumber rn
             WHERE rn.raffle = r
-              AND rn.status = com.rifas.platform.shared.enums.NumberStatus.RESERVED
+              AND rn.status = com.rifas.platform.shared.enums.NumberStatus.PAID
           )
         """)
     List<Raffle> findRafflesReadyForScheduledDraw(
