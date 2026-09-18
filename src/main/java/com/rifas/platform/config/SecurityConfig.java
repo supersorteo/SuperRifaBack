@@ -97,7 +97,8 @@ public class SecurityConfig {
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
-        source.registerCorsConfiguration("/ws/**", config);
+        // /ws/** is NOT registered here — WebSocketConfig.setAllowedOriginPatterns("*") owns WS CORS.
+        // Registering it here with a fixed origin list blocks SockJS preflight from unlisted origins.
         source.registerCorsConfiguration("/uploads/**", config);
         return source;
     }
