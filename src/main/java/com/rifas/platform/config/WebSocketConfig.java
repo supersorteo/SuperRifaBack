@@ -32,6 +32,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     @SuppressWarnings("NullableProblems")
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Native WebSocket endpoint — used by the frontend (no SockJS import needed)
+        registry.addEndpoint("/ws-stomp")
+                .setAllowedOriginPatterns("*");
+        // SockJS fallback kept for backward compatibility
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
                 .withSockJS()
