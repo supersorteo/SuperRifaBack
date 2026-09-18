@@ -56,7 +56,7 @@ public class SecurityConfig {
                         // Webhooks de MP
                         .requestMatchers("/api/payments/webhook/**").permitAll()
                         // WebSocket
-                        .requestMatchers("/ws/**", "/ws-stomp/**").permitAll()
+                        .requestMatchers("/ws/**", "/ws-stomp", "/ws-stomp/**").permitAll()
                         // Admin
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Organizador
@@ -104,6 +104,7 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
         source.registerCorsConfiguration("/ws/**", wsConfig);
+        source.registerCorsConfiguration("/ws-stomp", wsConfig);
         source.registerCorsConfiguration("/ws-stomp/**", wsConfig);
         source.registerCorsConfiguration("/uploads/**", config);
         return source;
