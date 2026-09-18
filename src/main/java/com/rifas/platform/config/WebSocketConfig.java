@@ -17,7 +17,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     @SuppressWarnings("NullableProblems")
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic", "/queue");
+        // Fix #4A: server heartbeat keeps Railway proxy alive; prevents idle WS disconnects
+        config.enableSimpleBroker("/topic", "/queue")
+              .setHeartbeatValue(new long[]{10000, 10000});
         config.setApplicationDestinationPrefixes("/app");
     }
 
@@ -26,6 +28,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
-                .withSockJS();
+                .withSockJS()
+                .setHeartbeatTime(10000)
+                .setDisconnectDelay(30000);
     }
 }

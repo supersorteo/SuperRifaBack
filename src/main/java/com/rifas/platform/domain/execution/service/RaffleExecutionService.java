@@ -22,6 +22,8 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -80,11 +82,34 @@ public class RaffleExecutionService {
 
         raffle.setOperationalStatus(OperationalStatus.EXECUTING);
         raffleRepository.saveAndFlush(raffle);
-        eventPublisher.publishDrawStarted(raffle.getId());
-        raffleDrawExecutor.execute(() ->
-                transactionTemplate.executeWithoutResult(status ->
-                        completeQueuedDraw(raffleId, method, executedBy))
-        );
+
+        // Fix #3: WS event + background thread start AFTER the outer @Transactional commits,
+        // so DB already shows EXECUTING when clients receive the event.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                eventPublisher.publishDrawStarted(raffleId);
+                raffleDrawExecutor.execute(() -> {
+                    // Fix #2: countdown runs OUTSIDE any transaction — no DB connection held during sleep
+                    try {
+                        publishLiveCountdown(raffleId);
+                    } catch (Exception ex) {
+                        log.error("Countdown interrupted for raffle {}: {}", raffleId, ex.getMessage());
+                        transactionTemplate.executeWithoutResult(s ->
+                                raffleRepository.findById(raffleId).ifPresent(r -> {
+                                    if (r.getOperationalStatus() == OperationalStatus.EXECUTING) {
+                                        r.setOperationalStatus(OperationalStatus.ACTIVE);
+                                        raffleRepository.save(r);
+                                    }
+                                }));
+                        eventPublisher.publishDrawFailed(raffleId);
+                        return;
+                    }
+                    transactionTemplate.executeWithoutResult(status ->
+                            completeQueuedDraw(raffleId, method, executedBy));
+                });
+            }
+        });
     }
 
     private void completeQueuedDraw(UUID raffleId, DrawMethod method, UUID executedBy) {
@@ -101,14 +126,14 @@ public class RaffleExecutionService {
         DrawResult result;
         try {
             List<Integer> eligible = buildEligibleNumbers(raffle);
-            publishLiveCountdown(raffle.getId());
             result = strategy.execute(raffle, eligible, executedBy);
         } catch (Exception ex) {
             raffle.setOperationalStatus(OperationalStatus.ACTIVE);
             raffleRepository.save(raffle);
             eventPublisher.publishDrawFailed(raffle.getId());
             log.error("Draw failed for raffle {}: {}", raffleId, ex.getMessage());
-            throw new BusinessException("Error en el sorteo: " + ex.getMessage());
+            // Fix #1: return instead of throw — avoids rolling back the recovery save above
+            return;
         }
 
         RaffleExecution execution = RaffleExecution.builder()
