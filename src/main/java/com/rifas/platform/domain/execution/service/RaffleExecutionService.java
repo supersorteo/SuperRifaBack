@@ -61,7 +61,7 @@ public class RaffleExecutionService {
     }
 
     private void queueDrawExecution(UUID raffleId, DrawMethod method, UUID executedBy) {
-        Raffle raffle = raffleRepository.findByIdWithPessimisticLock(raffleId)
+        Raffle raffle = raffleRepository.findById(raffleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
 
         if (raffle.getPublicationStatus() != PublicationStatus.PUBLISHED) {
@@ -91,15 +91,16 @@ public class RaffleExecutionService {
         Raffle raffle = raffleRepository.findById(raffleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Rifa no encontrada"));
 
-        if (raffle.getOperationalStatus() != OperationalStatus.EXECUTING) {
+        if (raffle.getOperationalStatus() == OperationalStatus.FINISHED
+                || raffle.getOperationalStatus() == OperationalStatus.CANCELLED
+                || raffle.getWinnerNumber() != null) {
             return;
         }
-
-        List<Integer> eligible = buildEligibleNumbers(raffle);
 
         DrawStrategy strategy = resolveStrategy(method);
         DrawResult result;
         try {
+            List<Integer> eligible = buildEligibleNumbers(raffle);
             publishLiveCountdown(raffle.getId());
             result = strategy.execute(raffle, eligible, executedBy);
         } catch (Exception ex) {
