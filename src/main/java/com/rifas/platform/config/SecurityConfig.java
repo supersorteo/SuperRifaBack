@@ -95,10 +95,15 @@ public class SecurityConfig {
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
+        // WS is public (draw events) — allow any origin so SockJS preflight succeeds from any frontend
+        CorsConfiguration wsConfig = new CorsConfiguration();
+        wsConfig.setAllowedOriginPatterns(List.of("*"));
+        wsConfig.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        wsConfig.setAllowedHeaders(List.of("*"));
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
-        // /ws/** is NOT registered here — WebSocketConfig.setAllowedOriginPatterns("*") owns WS CORS.
-        // Registering it here with a fixed origin list blocks SockJS preflight from unlisted origins.
+        source.registerCorsConfiguration("/ws/**", wsConfig);
         source.registerCorsConfiguration("/uploads/**", config);
         return source;
     }
