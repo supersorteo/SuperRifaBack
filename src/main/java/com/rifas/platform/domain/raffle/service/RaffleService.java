@@ -340,6 +340,7 @@ public class RaffleService {
                 raffle.getTotalNumbers(),
                 raffle.getPricePerNumber(),
                 raffle.getDrawDateTime(),
+                raffle.getTimezone(),
                 raffle.getCreatedAt(),
                 raffle.getImages().stream()
                         .map(image -> new OrganizerRaffleResponse.ImageInfo(

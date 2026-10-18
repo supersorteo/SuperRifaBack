@@ -36,7 +36,6 @@ public class RaffleEventPublisher {
                 "/topic/raffle/" + raffleId + "/result",
                 Map.of("raffleId", raffleId, "winnerNumber", winnerNumber,
                         "winnerName", winnerName != null ? winnerName : "",
-                        "winnerPhone", winnerPhone != null ? winnerPhone : "",
                         "ts", Instant.now())
         );
     }

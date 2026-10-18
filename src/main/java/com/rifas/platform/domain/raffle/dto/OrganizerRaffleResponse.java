@@ -25,6 +25,7 @@ public record OrganizerRaffleResponse(
         Integer totalNumbers,
         BigDecimal pricePerNumber,
         LocalDateTime drawDateTime,
+        String timezone,
         LocalDateTime createdAt,
         List<ImageInfo> images
 ) {
