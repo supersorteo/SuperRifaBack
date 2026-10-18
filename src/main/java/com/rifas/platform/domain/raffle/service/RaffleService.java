@@ -217,6 +217,13 @@ public class RaffleService {
                 + raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.PENDING_PAYMENT);
         long paid      = raffleNumberRepository.countByRaffleAndStatus(raffle, NumberStatus.PAID);
 
+        Reservation winnerRes = raffle.getWinnerReservationId() != null
+                ? reservationRepository.findById(raffle.getWinnerReservationId()).orElse(null)
+                : null;
+        String publicWinnerName = winnerRes != null && winnerRes.getParticipant() != null
+                ? winnerRes.getParticipant().getFullName()
+                : null;
+
         OrganizerProfile org = raffle.getOrganizer();
         User organizerUser = org.getUser();
 
@@ -235,7 +242,7 @@ public class RaffleService {
                 new RafflePublicResponse.OrganizerPublicInfo(
                         org.getBusinessName() != null ? org.getBusinessName() : organizerUser.getFullName(),
                         org.getAvatarUrl(), org.getWhatsappNumber()),
-                raffle.getWinnerNumber(), null, raffle.getExecutedAt(),
+                raffle.getWinnerNumber(), publicWinnerName, raffle.getExecutedAt(),
                 methods.stream().map(m -> new RafflePublicResponse.PaymentMethodPublicInfo(
                         m.getType().name(), m.getDisplayName(), m.getAlias(),
                         m.getCbu() != null ? m.getCbu() : m.getCvu(),
